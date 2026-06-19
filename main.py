@@ -1,5 +1,5 @@
 """
-Online Excell v1.0.0 — Premium Follow-up Tracker
+Online Excell v1.2.0 — Premium Follow-up Tracker
 Auto-generates monthly due lists from Insurance Policy Manager API.
 """
 
@@ -14,7 +14,7 @@ import requests as http_requests   # renamed to avoid clash with Turso pipeline 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 log = logging.getLogger("excell")
-app = FastAPI(title="Online Excell", version="1.0.0")
+app = FastAPI(title="Online Excell", version="1.2.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data.db"))
@@ -784,4 +784,4 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.2.0"}
