@@ -623,7 +623,7 @@ scheduler.start()
 
 # ── API Endpoints ──────────────────────────────────────────────────────────────
 
-# Combined init endpoint — fetches EVERYTHING in 1 Turso call
+# Combined init endpoint — fetches EVERYTHING in minimal Turso calls
 @app.get("/api/init/{year}/{month}")
 def api_init(year: int, month: int):
     """Return settings, col-names, sheet data, and unpaid alert in ONE request."""
@@ -631,41 +631,13 @@ def api_init(year: int, month: int):
     prev = date(today.year, today.month, 1) - __import__('datetime').timedelta(days=1)
     prev_month, prev_year = prev.month, prev.year
 
-    with get_db() as conn:
-        if hasattr(conn, 'batch_query'):
-            # Turso: run ALL queries in ONE HTTP call
-            results = conn.batch_query([
-                ("SELECT key, value FROM app_settings", None),                                    # 0: all settings
-                ("SELECT * FROM monthly_sheets WHERE month=? AND year=?", (month, year)),         # 1: current sheet
-                ("SELECT id FROM monthly_sheets WHERE month=? AND year=?", (prev_month, prev_year)),  # 2: prev sheet id
-            ])
-            # Parse settings
-            all_settings = {r["key"]: r["value"] for r in results[0].fetchall()}
-
-            # Parse current sheet
-            sheet = results[1].fetchone()
-            entries = []
-            if sheet:
-                entry_results = conn.batch_query([
-                    ("SELECT * FROM sheet_entries WHERE sheet_id=? ORDER BY sn", (sheet["id"],)),
-                ])
-                entries = entry_results[0].fetchall()
-
-            # Parse unpaid
-            prev_sheet = results[2].fetchone()
-            unpaid_entries = []
-            unpaid_count = 0
-            if prev_sheet:
-                unpaid_results = conn.batch_query([
-                    ("SELECT * FROM sheet_entries WHERE sheet_id=? AND status='DUE' ORDER BY sn", (prev_sheet["id"],)),
-                ])
-                unpaid_entries = unpaid_results[0].fetchall()
-                unpaid_count = len(unpaid_entries)
-        else:
-            # Local SQLite: just run queries directly
+    try:
+        with get_db() as conn:
+            # Get ALL settings in one query (instead of 12 separate calls)
             all_settings_rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
             all_settings = {r["key"]: r["value"] for r in all_settings_rows}
 
+            # Get current sheet
             sheet = conn.execute(
                 "SELECT * FROM monthly_sheets WHERE month=? AND year=?", (month, year)
             ).fetchone()
@@ -675,6 +647,7 @@ def api_init(year: int, month: int):
                     "SELECT * FROM sheet_entries WHERE sheet_id=? ORDER BY sn", (sheet["id"],)
                 ).fetchall()
 
+            # Get previous month unpaid
             prev_sheet = conn.execute(
                 "SELECT id FROM monthly_sheets WHERE month=? AND year=?", (prev_month, prev_year)
             ).fetchone()
@@ -686,6 +659,9 @@ def api_init(year: int, month: int):
                     (prev_sheet["id"],)
                 ).fetchall()
                 unpaid_count = len(unpaid_entries)
+    except Exception as e:
+        log.error(f"[api_init] Error: {e}")
+        raise HTTPException(500, f"Init failed: {e}")
 
     # Build col names from settings
     col_names = {}
