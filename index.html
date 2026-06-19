@@ -89,6 +89,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .bg:hover{background:var(--p2)}
 .bgr{background:var(--p3s);color:var(--green);border:1px solid var(--p3)}
 .bgr:hover{background:var(--p3)}
+.bd{background:rgba(255,82,82,0.08);color:var(--red);border:1px solid rgba(255,82,82,0.25)}
+.bd:hover{background:rgba(255,82,82,0.18);border-color:var(--red)}
 
 /* ── Unpaid Alert ──────────────────────────────── */
 .alert{display:none;margin:0 0 10px;padding:10px 16px;
@@ -254,6 +256,7 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
     <div class="sa">
       <button class="btn bg" onclick="generateSheet()">🔄 Generate Sheet</button>
       <button class="btn bgr" onclick="exportCSV()">📥 Export CSV</button>
+      <button class="btn bd" onclick="deleteSheet()">🗑️ Delete Sheet</button>
     </div>
   </div>
 
@@ -417,6 +420,13 @@ async function generateSheet(){showLoader(`Generating ${MN[vM]} ${vY}…`);
   try{const r=await fetch(`/api/sheets/generate/${vY}/${vM}`,{method:'POST'});
   if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
   const d=await r.json();toast(`✅ ${d.total_count} policies`);await loadSheet()}
+  catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
+
+async function deleteSheet(){if(!confirm(`⚠️ Delete ALL data for ${MN[vM]} ${vY}?\n\nThis removes it from database AND backup. Cannot be undone!`))return;
+  showLoader(`Deleting ${MN[vM]} ${vY}…`);
+  try{const r=await fetch(`/api/sheets/${vY}/${vM}`,{method:'DELETE'});
+  if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
+  toast('🗑️ Sheet deleted');allE=[];renderTable([]);updateStats([])}
   catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
 
 

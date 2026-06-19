@@ -672,6 +672,26 @@ def api_get_sheet(year: int, month: int):
 def api_generate_sheet(year: int, month: int):
     return generate_sheet(year, month)
 
+@app.delete("/api/sheets/{year}/{month}")
+def api_delete_sheet(year: int, month: int):
+    with get_db() as conn:
+        sheet = conn.execute(
+            "SELECT id FROM monthly_sheets WHERE month=? AND year=?", (month, year)
+        ).fetchone()
+        if not sheet:
+            raise HTTPException(404, "Sheet not found")
+        conn.execute("DELETE FROM sheet_entries WHERE sheet_id=?", (sheet["id"],))
+        conn.execute("DELETE FROM monthly_sheets WHERE id=?", (sheet["id"],))
+    # Also delete from R2 backup
+    if USE_R2:
+        try:
+            s3 = get_r2()
+            s3.delete_object(Bucket=R2_BUCKET, Key=f"backup/sheets/{year}_{month:02d}.json")
+        except Exception:
+            pass
+    backup_to_r2()  # re-sync remaining data
+    return {"message": f"Sheet for {month}/{year} deleted from everywhere."}
+
 # Toggle status
 @app.patch("/api/entries/{entry_id}/toggle")
 def api_toggle_status(entry_id: int):
