@@ -105,6 +105,32 @@ class TursoConnection:
     def __exit__(self, *args):
         pass  # HTTP is stateless — each execute auto-commits
 
+    def batch_execute(self, statements):
+        """Execute multiple SQL statements in ONE HTTP request.
+        statements = [(sql, params), (sql, params), ...]
+        """
+        reqs = []
+        for sql, params in statements:
+            stmt = {"sql": sql}
+            if params:
+                stmt["args"] = [self._typed(p) for p in params]
+            reqs.append({"type": "execute", "stmt": stmt})
+        reqs.append({"type": "close"})
+        # Turso has a max pipeline size, batch in chunks of 200
+        chunk_size = 200
+        all_results = []
+        for i in range(0, len(reqs) - 1, chunk_size):  # -1 to exclude close
+            chunk = reqs[i:i + chunk_size] + [{"type": "close"}]
+            resp = http_requests.post(self.endpoint, json={"requests": chunk},
+                                      headers=self.headers, timeout=120)
+            resp.raise_for_status()
+            data = resp.json()
+            for res in data["results"]:
+                if res.get("type") == "error":
+                    raise Exception(f"Turso batch: {res['error']}")
+            all_results.extend(data["results"])
+        return all_results
+
 # ── Database Layer ─────────────────────────────────────────────────────────────
 
 def dict_factory(cursor, row):
@@ -479,16 +505,31 @@ def generate_sheet(year: int, month: int) -> dict:
         ).fetchone()
         sheet_id = sheet_row["id"]
 
-        for i, p in enumerate(due_policies, 1):
-            conn.execute(
-                """INSERT INTO sheet_entries
-                (sheet_id, sn, policyno, name, doc, plan, mode, premium, sumass, mobileno, due_date, status, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (sheet_id, i, p.get("policyno",""), p.get("name",""), p.get("doc",""),
-                 p.get("plan",""), p.get("mode",""), p.get("premium",""), p.get("sumass",""),
-                 p.get("mobileno",""), p.get("due_date",""), p["status"],
-                 datetime.now().isoformat())
-            )
+        # Batch insert all entries at once (1 HTTP call instead of 400+)
+        if hasattr(conn, 'batch_execute') and due_policies:
+            stmts = []
+            for i, p in enumerate(due_policies, 1):
+                stmts.append((
+                    """INSERT INTO sheet_entries
+                    (sheet_id, sn, policyno, name, doc, plan, mode, premium, sumass, mobileno, due_date, status, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (sheet_id, i, p.get("policyno",""), p.get("name",""), p.get("doc",""),
+                     p.get("plan",""), p.get("mode",""), p.get("premium",""), p.get("sumass",""),
+                     p.get("mobileno",""), p.get("due_date",""), p["status"],
+                     datetime.now().isoformat())
+                ))
+            conn.batch_execute(stmts)
+        else:
+            for i, p in enumerate(due_policies, 1):
+                conn.execute(
+                    """INSERT INTO sheet_entries
+                    (sheet_id, sn, policyno, name, doc, plan, mode, premium, sumass, mobileno, due_date, status, updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (sheet_id, i, p.get("policyno",""), p.get("name",""), p.get("doc",""),
+                     p.get("plan",""), p.get("mode",""), p.get("premium",""), p.get("sumass",""),
+                     p.get("mobileno",""), p.get("due_date",""), p["status"],
+                     datetime.now().isoformat())
+                )
 
     # Backup to R2 after generating
     backup_to_r2()
