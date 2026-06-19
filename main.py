@@ -3,33 +3,225 @@ Online Excell v1.0.0 — Premium Follow-up Tracker
 Auto-generates monthly due lists from Insurance Policy Manager API.
 """
 
-import os, re, sqlite3, json, io, csv
+import os, re, sqlite3, json, io, csv, logging
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from dateutil import parser as dateparser
 from contextlib import contextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse
-import requests
+import requests as http_requests   # renamed to avoid clash with Turso pipeline field
 from apscheduler.schedulers.background import BackgroundScheduler
 
+log = logging.getLogger("excell")
 app = FastAPI(title="Online Excell", version="1.0.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data.db"))
 
-# ── Database ───────────────────────────────────────────────────────────────────
+# ── Cloud Config ──────────────────────────────────────────────────────────────
+TURSO_URL = os.environ.get("TURSO_URL", "")            # libsql://db-name.turso.io
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")         # https://<acct>.r2.cloudflarestorage.com
+R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY", "")
+R2_SECRET_KEY = os.environ.get("R2_SECRET_KEY", "")
+R2_BUCKET = os.environ.get("R2_BUCKET", "online-excell")
+
+USE_TURSO = bool(TURSO_URL and TURSO_AUTH_TOKEN)
+USE_R2 = bool(R2_ENDPOINT and R2_ACCESS_KEY and R2_SECRET_KEY and R2_BUCKET)
+
+# ── Turso HTTP Client (no Rust, no extra packages) ────────────────────────────
+
+class TursoResult:
+    """Mimics sqlite3 cursor result interface."""
+    def __init__(self, result_data):
+        self.cols = [c["name"] for c in result_data.get("cols", [])]
+        raw_rows = result_data.get("rows", [])
+        self._rows = []
+        for raw_row in raw_rows:
+            row = {}
+            for i, val in enumerate(raw_row):
+                col_name = self.cols[i] if i < len(self.cols) else f"col{i}"
+                row[col_name] = self._extract(val)
+            self._rows.append(row)
+        self.lastrowid = result_data.get("last_insert_rowid")
+        self.rowcount = result_data.get("affected_row_count", 0)
+
+    @staticmethod
+    def _extract(v):
+        if v is None or v.get("type") == "null":
+            return None
+        if v.get("type") == "integer":
+            return int(v["value"])
+        if v.get("type") == "float":
+            return float(v["value"])
+        return v.get("value", "")
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+class TursoConnection:
+    """HTTP-based connection to Turso — drop-in for sqlite3.Connection."""
+    def __init__(self, url, token):
+        self.base_url = url.replace("libsql://", "https://").rstrip("/")
+        self.endpoint = f"{self.base_url}/v2/pipeline"
+        self.headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        self._last_rowid = None
+
+    def execute(self, sql, params=None):
+        stmt = {"sql": sql}
+        if params:
+            stmt["args"] = [self._typed(p) for p in params]
+        body = {"requests": [{"type": "execute", "stmt": stmt}, {"type": "close"}]}
+        resp = http_requests.post(self.endpoint, json=body, headers=self.headers, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        res = data["results"][0]
+        if res["type"] == "error":
+            raise Exception(f"Turso: {res['error'].get('message', res['error'])}")
+        result = TursoResult(res["response"]["result"])
+        if result.lastrowid:
+            self._last_rowid = result.lastrowid
+        return result
+
+    @staticmethod
+    def _typed(val):
+        if val is None:
+            return {"type": "null"}
+        if isinstance(val, bool):
+            return {"type": "integer", "value": str(int(val))}
+        if isinstance(val, int):
+            return {"type": "integer", "value": str(val)}
+        if isinstance(val, float):
+            return {"type": "float", "value": str(val)}
+        return {"type": "text", "value": str(val)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass  # HTTP is stateless — each execute auto-commits
+
+# ── Database Layer ─────────────────────────────────────────────────────────────
 
 def dict_factory(cursor, row):
     cols = [col[0] for col in cursor.description]
     return dict(zip(cols, row))
 
 def get_db():
+    """Return Turso cloud DB if configured, else local SQLite."""
+    if USE_TURSO:
+        return TursoConnection(TURSO_URL, TURSO_AUTH_TOKEN)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = dict_factory
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+# ── R2 Backup (Cloudflare) ─────────────────────────────────────────────────────
+
+def get_r2():
+    """Return boto3 S3 client pointed at Cloudflare R2."""
+    if not USE_R2:
+        return None
+    import boto3
+    return boto3.client("s3",
+        endpoint_url=R2_ENDPOINT,
+        aws_access_key_id=R2_ACCESS_KEY,
+        aws_secret_access_key=R2_SECRET_KEY,
+        region_name="auto",
+    )
+
+def backup_to_r2():
+    """Backup all DB data to R2 as JSON files."""
+    if not USE_R2:
+        return
+    try:
+        s3 = get_r2()
+        with get_db() as conn:
+            # Backup settings
+            settings = conn.execute("SELECT * FROM app_settings").fetchall()
+            s3.put_object(Bucket=R2_BUCKET, Key="backup/settings.json",
+                          Body=json.dumps(settings, default=str), ContentType="application/json")
+
+            # Backup all sheets + entries
+            sheets = conn.execute("SELECT * FROM monthly_sheets ORDER BY year, month").fetchall()
+            for sheet in sheets:
+                entries = conn.execute(
+                    "SELECT * FROM sheet_entries WHERE sheet_id=? ORDER BY sn", (sheet["id"],)
+                ).fetchall()
+                payload = {"sheet": sheet, "entries": entries}
+                key = f"backup/sheets/{sheet['year']}_{sheet['month']:02d}.json"
+                s3.put_object(Bucket=R2_BUCKET, Key=key,
+                              Body=json.dumps(payload, default=str), ContentType="application/json")
+        log.info("[R2 Backup] Success")
+    except Exception as e:
+        log.error(f"[R2 Backup] Error: {e}")
+
+def restore_from_r2():
+    """Restore data from R2 if DB is empty (fallback after Turso failure)."""
+    if not USE_R2:
+        return
+    try:
+        with get_db() as conn:
+            count = conn.execute("SELECT COUNT(*) AS c FROM monthly_sheets").fetchone()
+            if count and count["c"] > 0:
+                return  # DB already has data, skip restore
+
+        s3 = get_r2()
+
+        # Restore settings
+        try:
+            obj = s3.get_object(Bucket=R2_BUCKET, Key="backup/settings.json")
+            settings = json.loads(obj["Body"].read().decode())
+            with get_db() as conn:
+                for s in settings:
+                    conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?,?)",
+                                 (s["key"], s["value"]))
+            log.info(f"[R2 Restore] Restored {len(settings)} settings")
+        except Exception:
+            pass
+
+        # Restore sheets
+        try:
+            resp = s3.list_objects_v2(Bucket=R2_BUCKET, Prefix="backup/sheets/")
+            for item in resp.get("Contents", []):
+                obj = s3.get_object(Bucket=R2_BUCKET, Key=item["Key"])
+                data = json.loads(obj["Body"].read().decode())
+                sheet = data["sheet"]
+                entries = data["entries"]
+                with get_db() as conn:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO monthly_sheets (month, year, generated_at, total_count) VALUES (?,?,?,?)",
+                        (sheet["month"], sheet["year"], sheet.get("generated_at",""), sheet.get("total_count",0))
+                    )
+                    new_sheet = conn.execute(
+                        "SELECT id FROM monthly_sheets WHERE month=? AND year=?",
+                        (sheet["month"], sheet["year"])
+                    ).fetchone()
+                    if new_sheet:
+                        for e in entries:
+                            conn.execute(
+                                """INSERT INTO sheet_entries
+                                (sheet_id,sn,policyno,name,doc,plan,mode,premium,sumass,mobileno,due_date,status,
+                                 col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,updated_at)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                (new_sheet["id"], e.get("sn"), e.get("policyno",""), e.get("name",""),
+                                 e.get("doc",""), e.get("plan",""), e.get("mode",""), e.get("premium",""),
+                                 e.get("sumass",""), e.get("mobileno",""), e.get("due_date",""),
+                                 e.get("status","DUE"), e.get("col1",""), e.get("col2",""),
+                                 e.get("col3",""), e.get("col4",""), e.get("col5",""),
+                                 e.get("col6",""), e.get("col7",""), e.get("col8",""),
+                                 e.get("col9",""), e.get("col10",""), e.get("updated_at",""))
+                            )
+            log.info("[R2 Restore] Sheets restored")
+        except Exception as e:
+            log.error(f"[R2 Restore] Sheet error: {e}")
+    except Exception as e:
+        log.error(f"[R2 Restore] Error: {e}")
 
 def init_db():
     with get_db() as conn:
@@ -79,6 +271,9 @@ def init_db():
                 conn.execute(f"ALTER TABLE sheet_entries ADD COLUMN {cname} TEXT DEFAULT ''")
 
 init_db()
+
+# Restore from R2 if DB is empty (after fresh deploy)
+restore_from_r2()
 
 # ── Settings helpers ───────────────────────────────────────────────────────────
 
@@ -240,7 +435,7 @@ def generate_sheet(year: int, month: int) -> dict:
     limit = 500
     while True:
         try:
-            resp = requests.get(
+            resp = http_requests.get(
                 f"{base_url.rstrip('/')}/api/v1/policies",
                 headers={"X-API-Key": api_key},
                 params={"limit": limit, "offset": offset},
@@ -253,7 +448,7 @@ def generate_sheet(year: int, month: int) -> dict:
             if len(policies) < limit:
                 break
             offset += limit
-        except requests.RequestException as e:
+        except http_requests.RequestException as e:
             raise HTTPException(502, f"Failed to fetch from API: {e}")
 
     # Filter policies due in target month (deduplicate by policyno)
@@ -279,7 +474,10 @@ def generate_sheet(year: int, month: int) -> dict:
             "INSERT INTO monthly_sheets (month, year, generated_at, total_count) VALUES (?,?,?,?)",
             (month, year, datetime.now().isoformat(), len(due_policies))
         )
-        sheet_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        sheet_row = conn.execute(
+            "SELECT id FROM monthly_sheets WHERE month=? AND year=?", (month, year)
+        ).fetchone()
+        sheet_id = sheet_row["id"]
 
         for i, p in enumerate(due_policies, 1):
             conn.execute(
@@ -291,6 +489,9 @@ def generate_sheet(year: int, month: int) -> dict:
                  p.get("mobileno",""), p.get("due_date",""), p["status"],
                  datetime.now().isoformat())
             )
+
+    # Backup to R2 after generating
+    backup_to_r2()
 
     return {
         "sheet_id": sheet_id,
@@ -325,7 +526,7 @@ def self_ping():
     """Ping own /health endpoint to prevent Render free tier from sleeping."""
     try:
         port = int(os.environ.get("PORT", 8900))
-        requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+        http_requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
         print("[SelfPing] OK")
     except Exception:
         pass  # Server might not be ready yet
@@ -338,6 +539,9 @@ scheduler.add_job(auto_generate_current_month, 'date',
                   run_date=datetime.now() + __import__('datetime').timedelta(seconds=5))
 # Self-ping every 10 minutes to stay alive on Render free tier
 scheduler.add_job(self_ping, 'interval', minutes=10)
+# Backup to R2 every hour
+if USE_R2:
+    scheduler.add_job(backup_to_r2, 'interval', hours=1)
 scheduler.start()
 
 # ── API Endpoints ──────────────────────────────────────────────────────────────
@@ -370,6 +574,7 @@ def api_set_col_name(col: str = Query(...), name: str = Query(...)):
 def api_save_settings(api_key: str = Query(...), api_base_url: str = Query(...)):
     set_setting("api_key", api_key.strip())
     set_setting("api_base_url", api_base_url.strip().rstrip("/"))
+    backup_to_r2()  # persist settings to R2
     return {"message": "Settings saved."}
 
 @app.post("/api/settings/test")
@@ -379,7 +584,7 @@ def api_test_connection():
     if not api_key or not base_url:
         raise HTTPException(400, "API key and base URL not configured.")
     try:
-        resp = requests.get(
+        resp = http_requests.get(
             f"{base_url}/api/v1/policies/count",
             headers={"X-API-Key": api_key},
             timeout=10,
@@ -387,7 +592,7 @@ def api_test_connection():
         resp.raise_for_status()
         data = resp.json()
         return {"success": True, "count": data.get("count", 0), "message": f"Connected! {data.get('count',0)} policies found."}
-    except requests.RequestException as e:
+    except http_requests.RequestException as e:
         return {"success": False, "message": f"Connection failed: {e}"}
 
 # Sheets
