@@ -333,12 +333,23 @@ def auto_generate_current_month():
     except Exception as e:
         print(f"[AutoGen] Error: {e}")
 
+def self_ping():
+    """Ping own /health endpoint to prevent Render free tier from sleeping."""
+    try:
+        port = int(os.environ.get("PORT", 8900))
+        requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+        print("[SelfPing] OK")
+    except Exception:
+        pass  # Server might not be ready yet
+
 scheduler = BackgroundScheduler()
 # Run on the 1st of every month at 00:05
 scheduler.add_job(auto_generate_current_month, 'cron', day=1, hour=0, minute=5)
 # Also run at startup after a short delay
 scheduler.add_job(auto_generate_current_month, 'date',
                   run_date=datetime.now() + __import__('datetime').timedelta(seconds=5))
+# Self-ping every 10 minutes to stay alive on Render free tier
+scheduler.add_job(self_ping, 'interval', minutes=10)
 scheduler.start()
 
 # ── API Endpoints ──────────────────────────────────────────────────────────────
