@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Online Excell — Premium Due Tracker</title>
+<meta name="description" content="Auto-generated monthly premium due lists with follow-up tracking.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --p1:#F9B2D7;--p2:#CFECF3;--p3:#DAF9DE;--p4:#F6FFDC;--p5:#9FA1FF;
+  --p1s:#FDE8F2;--p2s:#EAF6FA;--p3s:#EDFCEF;--p4s:#FBFFEF;--p5s:#E8E9FF;
+  --p1d:#e890bc;--p2d:#a8d8e8;--p3d:#b5eebb;--p4d:#e8f0b8;--p5d:#8385f0;
+  --bg:#FFF5F9;--surface:#ffffff;
+  --card:#FFF0F5;--card-h:#FFE8F0;
+  --border:#f0c8d8;--border-h:#e0a8c0;
+  --text:#2d1f30;--text2:#6b4d5e;--muted:#a07888;
+  --accent:#9FA1FF;--accent-l:#b5b7ff;--accent-g:rgba(159,161,255,0.15);
+  --green:#2e9e6e;--green-s:rgba(46,158,110,0.1);
+  --red:#d94060;--red-s:rgba(217,64,96,0.08);
+  --amber:#c98820;--amber-s:rgba(201,136,32,0.08);
+  --cyan:#4ea8b8;--cyan-s:rgba(78,168,184,0.08);
+  --r:12px;--rs:8px;--rx:6px;
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.55;overflow-x:hidden}
+.wrap{max-width:1440px;margin:0 auto;padding:14px 24px 80px}
+
+/* ── Section 1: Top Bar ────────────────────────── */
+.top{display:flex;align-items:center;gap:0;padding:0;border-radius:var(--r);
+  background:var(--surface);border:1px solid var(--p2);overflow:hidden;
+  box-shadow:0 2px 8px rgba(207,236,243,0.3);margin-bottom:10px}
+.spc{flex:1}
+/* Version pill */
+.t-ver{padding:10px 16px;border-right:1px solid var(--p2);display:flex;align-items:center}
+.pill{font-size:10px;font-weight:600;letter-spacing:0.4px;padding:4px 10px;border-radius:20px;
+  background:var(--p5s);border:1px solid var(--p5);color:var(--p5d);white-space:nowrap}
+/* Inline stats */
+.db-stats{display:flex;flex:1}
+.db-stat{flex:1;padding:8px 14px;border-right:1px solid var(--p2);text-align:center}
+.db-stat:hover{background:var(--p4s)}
+.db-stat .ds-l{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:1px}
+.db-stat .ds-v{font-size:16px;font-weight:900;letter-spacing:-0.3px}
+.db-stat.s-total .ds-v{color:var(--p5d)}
+.db-stat.s-prem .ds-v{color:var(--amber)}
+.db-stat.s-paid .ds-v{color:var(--green)}
+.db-stat.s-due .ds-v{color:var(--red)}
+/* Month nav */
+.db-month{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.db-arrow{width:26px;height:26px;border-radius:50%;background:var(--surface);border:1px solid var(--p5);
+  color:var(--p5d);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;font-weight:700}
+.db-arrow:hover{background:var(--p5);color:#fff;transform:scale(1.1)}
+.db-label{font-size:13px;font-weight:900;letter-spacing:-0.3px;min-width:110px;text-align:center}
+.db-label .mm{color:var(--p5d);font-size:13px}
+.db-label .yy{color:var(--muted);font-weight:600;font-size:11px;margin-left:3px}
+/* Top right controls */
+.t-controls{display:flex;align-items:center;gap:6px;padding:8px 14px}
+.gear{width:28px;height:28px;border-radius:var(--rx);background:var(--p2s);border:1px solid var(--p2);
+  color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.gear:hover{background:var(--p2);color:var(--text)}
+
+/* ── Settings ──────────────────────────────────── */
+.settings{display:none;margin:0 0 10px;padding:16px;background:var(--surface);border:1px solid var(--p2);
+  border-radius:var(--r);animation:sd .25s ease;box-shadow:0 2px 8px rgba(207,236,243,0.4)}
+.settings.open{display:block}
+@keyframes sd{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.settings h3{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+.sr{display:flex;gap:10px;margin-bottom:10px}
+.sr input{flex:1;padding:9px 13px;background:var(--p4s);border:1px solid var(--p4d);border-radius:var(--rx);
+  color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color .2s}
+.sr input::placeholder{color:var(--muted)}
+.sr input:focus{border-color:var(--p5);box-shadow:0 0 0 3px var(--accent-g)}
+.sa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ss{font-size:11px;color:var(--muted);margin-left:8px}
+.set-divider{width:100%;height:1px;background:var(--p2);margin:12px 0}
+
+/* ── Buttons ───────────────────────────────────── */
+.btn{padding:6px 14px;border:none;border-radius:var(--rx);cursor:pointer;font-family:var(--font);
+  font-size:11px;font-weight:700;transition:all .18s;user-select:none;display:inline-flex;align-items:center;gap:5px;letter-spacing:0.2px}
+.btn:active{transform:scale(0.96)}
+.bp{background:linear-gradient(135deg,var(--p5),var(--p1));color:#fff;box-shadow:0 2px 10px rgba(159,161,255,0.3)}
+.bp:hover{box-shadow:0 4px 18px rgba(159,161,255,0.45);transform:translateY(-1px)}
+.bg{background:var(--p2s);color:var(--text2);border:1px solid var(--p2)}
+.bg:hover{background:var(--p2)}
+.bgr{background:var(--p3s);color:var(--green);border:1px solid var(--p3)}
+.bgr:hover{background:var(--p3)}
+
+/* ── Unpaid Alert ──────────────────────────────── */
+.alert{display:none;margin:0 0 10px;padding:10px 16px;
+  background:linear-gradient(135deg,var(--p1s),var(--p4s));
+  border:1px solid var(--p1);border-radius:var(--r);
+  align-items:center;gap:14px;cursor:pointer;transition:all .2s}
+.alert.show{display:flex}
+.alert:hover{border-color:var(--p1d);background:linear-gradient(135deg,var(--p1),var(--p4s))}
+.ai{font-size:20px;flex-shrink:0}
+.ab{flex:1}.ab strong{display:block;font-size:11px;font-weight:700;color:var(--red)}.ab span{font-size:10px;color:var(--muted)}
+.ac{font-size:16px;font-weight:900;color:var(--red);background:var(--red-s);border:1px solid rgba(217,64,96,0.2);
+  padding:4px 14px;border-radius:var(--rx);text-align:center}
+
+/* ── Section 2: Search Bar ─────────────────────── */
+.search-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;
+  background:var(--surface);border:1px solid var(--p2);border-radius:var(--r);padding:6px 12px;
+  box-shadow:0 2px 8px rgba(207,236,243,0.15)}
+
+.fbox{position:relative;flex:1}
+.fbox input{width:100%;padding:8px 12px 8px 32px;background:transparent;border:none;
+  color:var(--text);font-family:var(--font);font-size:13px;font-weight:500;outline:none}
+.fbox input::placeholder{color:var(--muted);font-weight:400}
+.fbox .fi{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
+.clock{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--green);background:var(--p3s);
+  border:1px solid var(--p3d);padding:8px 14px;border-radius:var(--rx);white-space:nowrap;letter-spacing:0.4px;flex-shrink:0}
+
+/* ── Section 3: Data Table ─────────────────────── */
+.tw{background:var(--surface);border:2px solid var(--p2);border-radius:var(--r);overflow:hidden;
+  box-shadow:0 2px 8px rgba(207,236,243,0.3);contain:layout style}
+.ts{overflow-x:auto;-webkit-overflow-scrolling:touch;will-change:scroll-position}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead{position:sticky;top:0;z-index:2}
+th{background:var(--p2s);color:var(--text2);font-weight:700;font-size:9.5px;
+  text-transform:uppercase;letter-spacing:1px;padding:10px 12px;text-align:center;
+  white-space:nowrap;user-select:none;
+  border:2px solid var(--p2)}
+td{padding:5px;text-align:center;white-space:nowrap;
+  border:2px solid var(--p2);font-variant-numeric:tabular-nums;user-select:none}
+td.editable{cursor:text;min-width:80px}
+td.editable:focus{outline:2px solid var(--p5);outline-offset:-2px;background:#fff !important}
+th.col-edit{cursor:pointer}
+/* 5 pastel column colors — cells (soft) and headers (exact) */
+.cp1{background:#FDE8F2}.cp2{background:#EAF6FA}.cp3{background:#EDFCEF}.cp4{background:#FBFFEF}.cp5{background:#E8E9FF}
+.cp6{background:#FFD4D4}.cp7{background:#DFD0E8}
+th.hp1{background:#F9B2D7 !important}th.hp2{background:#CFECF3 !important}
+th.hp3{background:#DAF9DE !important}th.hp4{background:#F6FFDC !important}th.hp5{background:#C7C9FF !important}
+th.hp6{background:#FFA4A4 !important}th.hp7{background:#BDA6CE !important}
+
+/* Row hover — full highlight */
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:#f0e6ff !important}
+/* Active copied row — stays until next copy */
+tbody tr.copied-row td{background:#F0FFF0 !important;color:#1B8C3A !important;font-weight:700}
+
+.te{padding:50px 20px;text-align:center;color:var(--muted);font-size:13px;border:none !important}
+.te .btn{margin-top:12px}
+/* Search highlight */
+mark.hl{background:transparent;color:#E75480;padding:0;border-radius:0;font-weight:800}
+
+/* ── Status Cell Colors ────────────────────────── */
+td.st-due{background:#FFD6D6;color:#c0365a;font-weight:800;font-size:10px;cursor:pointer;letter-spacing:0.5px}
+td.st-paid{background:#C8F7D5;color:#1a7a45;font-weight:800;font-size:10px;cursor:pointer;letter-spacing:0.5px}
+td.st-auto{background:#E8E9FF;color:#6b6dd0;font-weight:700;font-size:10px}
+td.st-branch{background:#EAF6FA;color:#3a8fa0;font-weight:700;font-size:10px}
+td.st-daily{background:#FBFFEF;color:#8a8520;font-weight:700;font-size:10px}
+
+/* ── Edit Mode ─────────────────────────────────── */
+.edit-btn{width:30px;height:30px;border-radius:var(--rx);background:var(--p3s);border:1px solid var(--p3);
+  color:var(--green);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.edit-btn:hover{background:var(--p3)}
+.edit-btn.active{background:var(--p5);border-color:var(--p5d);color:#fff}
+td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff !important;cursor:text}
+
+/* ── Toast ─────────────────────────────────────── */
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(14px);
+  background:var(--text);border:none;color:#fff;padding:9px 20px;border-radius:var(--rx);
+  font-size:12px;font-weight:500;font-family:var(--font);opacity:0;transition:all .3s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events:none;z-index:999;box-shadow:0 8px 30px rgba(0,0,0,0.15);display:flex;align-items:center;gap:7px}
+.toast .ti{color:var(--p3);font-size:14px}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Loader ────────────────────────────────────── */
+.lo{display:none;position:fixed;inset:0;z-index:200;background:rgba(255,245,249,0.9);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.lo.show{display:flex}
+.sp{width:36px;height:36px;border:3px solid var(--p2);border-top-color:var(--p5);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lt{font-size:12px;color:var(--text2);font-weight:500}
+
+/* ── Modal ─────────────────────────────────────── */
+.mbg{display:none;position:fixed;inset:0;z-index:150;align-items:center;justify-content:center}
+.mbg.open{display:flex}
+.msh{position:absolute;inset:0;background:rgba(45,31,48,0.3);backdrop-filter:blur(4px)}
+.mbox{position:relative;width:96%;max-width:1200px;max-height:calc(100vh - 40px);background:var(--surface);
+  border:1px solid var(--p2);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 20px 60px rgba(249,178,215,0.2);animation:mp .25s ease}
+@keyframes mp{from{opacity:0;transform:scale(0.95) translateY(10px)}to{opacity:1;transform:none}}
+.mhd{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--p2);flex-shrink:0;background:var(--p1s)}
+.mhd h2{font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px}
+.mx{width:28px;height:28px;border-radius:var(--rx);background:var(--surface);border:1px solid var(--p1);
+  color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.mx:hover{background:var(--p1);color:var(--text)}
+.mc{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* ── Responsive ────────────────────────────────── */
+@media(max-width:900px){
+  .dash-bar{flex-direction:column}
+  .db-month{border-right:none;border-bottom:1px solid var(--p2);width:100%;justify-content:center}
+  .db-stats{flex-wrap:wrap}
+  .db-stat{min-width:50%;border-bottom:1px solid var(--p2)}
+}
+@media(max-width:640px){
+  .wrap{padding:10px 12px 60px}
+  .top{flex-wrap:wrap;gap:6px}
+  .spc{display:none}
+  .toolbar{flex-direction:column;align-items:stretch}
+  .fbox{width:100%}
+  td{padding:6px 8px;font-size:11px}
+  th{padding:8px 8px;font-size:8.5px}
+  .alert{flex-direction:column;text-align:center;gap:6px}
+}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--p1);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--p1d)}
+@keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.top{animation:fu .3s ease both}
+.search-row{animation:fu .3s .05s ease both}
+.tw{animation:fu .3s .1s ease both}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Section 1: Top Bar -->
+  <div class="top">
+    <div class="t-ver"><span class="pill">v1.0.0</span></div>
+    <div class="db-stats">
+      <div class="db-stat s-total"><div class="ds-l">Total</div><div class="ds-v" id="statTotal">0</div></div>
+      <div class="db-stat s-prem"><div class="ds-l">Premium</div><div class="ds-v" id="statPremium">₹0</div></div>
+      <div class="db-stat s-paid"><div class="ds-l">Paid / Auto</div><div class="ds-v" id="statPaid">0</div></div>
+      <div class="db-stat s-due"><div class="ds-l">Due</div><div class="ds-v" id="statDue">0</div></div>
+    </div>
+    <div class="t-controls">
+      <button class="edit-btn" id="editToggle" onclick="toggleEditMode()" title="Toggle Edit Mode">✏️</button>
+      <button class="gear" onclick="toggleSettings()" title="Settings">⚙</button>
+    </div>
+  </div>
+
+  <!-- Settings (hidden) -->
+  <div class="settings" id="settingsPanel">
+    <h3>🔌 API Configuration</h3>
+    <div class="sr">
+      <input type="url" id="settingUrl" placeholder="Base URL (e.g. https://due-list-manager.onrender.com)">
+      <input type="password" id="settingKey" placeholder="API Key (e.g. ipm_xxxx…)">
+    </div>
+    <div class="sa">
+      <button class="btn bp" onclick="saveSettings()">💾 Save</button>
+      <button class="btn bg" onclick="testConnection()">🔌 Test</button>
+      <span class="ss" id="settingsStatus"></span>
+    </div>
+    <div class="set-divider"></div>
+    <div class="sa">
+      <button class="btn bg" onclick="generateSheet()">🔄 Generate Sheet</button>
+      <button class="btn bgr" onclick="exportCSV()">📥 Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Unpaid Alert -->
+  <div class="alert" id="unpaidBanner" onclick="showUnpaidModal()">
+    <span class="ai">🔔</span>
+    <div class="ab"><strong id="unpaidTitle">Policies left unpaid</strong><span id="unpaidSubtext">Click to view</span></div>
+    <div class="ac" id="unpaidCount">0</div>
+  </div>
+
+  <!-- Section 2: Search + Month Nav + Clock -->
+  <div class="search-row">
+    <div class="fbox"><span class="fi">⌕</span>
+      <input type="text" id="filterInput" placeholder="Search name, policy, mobile…" oninput="filterTable()">
+    </div>
+    <div class="db-month">
+      <button class="db-arrow" onclick="prevMonth()">‹</button>
+      <div class="db-label" id="monthLabel"><span class="mm">June</span><span class="yy">2026</span></div>
+      <button class="db-arrow" onclick="nextMonth()">›</button>
+    </div>
+    <span class="clock" id="liveClock">--:--:--</span>
+  </div>
+
+  <!-- Table -->
+  <div class="tw"><div class="ts">
+    <table><thead><tr id="tHead"></tr></thead><tbody id="tBody"></tbody></table>
+  </div></div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span class="ti">✓</span><span id="toastText"></span></div>
+
+<!-- Loader -->
+<div class="lo" id="loader"><div class="sp"></div><div class="lt" id="loaderText">Loading…</div></div>
+
+<!-- Unpaid Modal -->
+<div class="mbg" id="unpaidModal">
+  <div class="msh" onclick="closeUnpaidModal()"></div>
+  <div class="mbox">
+    <div class="mhd"><h2>🔔 Unpaid — <span id="unpaidMonthLabel">Last Month</span></h2><button class="mx" onclick="closeUnpaidModal()">&times;</button></div>
+    <div class="mc" id="unpaidModalBody"></div>
+  </div>
+</div>
+
+<script>
+const COLS=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date','status','col1','col2','col3','col4','col5','col6','col7','col8','col9','col10'];
+let COL_NAMES={sn:'SN',policyno:'Policy No',name:'Name',doc:'DOC',plan:'Plan',mode:'Mode',premium:'Premium',sumass:'Sum Assured',mobileno:'Mobile',due_date:'Due Date',status:'Status',col1:'Note 1',col2:'Note 2',col3:'Note 3',col4:'Note 4',col5:'Note 5',col6:'Note 6',col7:'Note 7',col8:'Note 8',col9:'Note 9',col10:'Note 10'};
+const EDITABLE_COLS=new Set(['col1','col2','col3','col4','col5','col6','col7','col8','col9','col10']);
+// Color index per column (1-5 pastels, 6=coral, 7=purple for status neighbors)
+const COL_CLR=[1,2,3,4,5,1,2,3,4,6,0,7,4,5,1,2,3,4,5,1,2];
+const STATUS_ORDER={DUE:0,PAID:1,AUTODEBIT:2,DAILYCOLLECTION:3,BRANCHPAID:4};
+const MN=['','January','February','March','April','May','June','July','August','September','October','November','December'];
+let vY,vM,allE=[],sortC=-1,sortA=true;
+let editMode=false;
+const now=new Date();vY=now.getFullYear();vM=now.getMonth()+1;
+
+// Clock — 12hr AM/PM + date
+function tick(){const n=new Date();
+  const day=String(n.getDate()).padStart(2,'0');
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n.getMonth()];
+  let h=n.getHours(),ampm=h>=12?'PM':'AM';h=h%12||12;
+  const time=[h,n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
+  document.getElementById('liveClock').textContent=`${day} ${mon} · ${time} ${ampm}`}
+setInterval(tick,1000);tick();
+
+// Utils
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toast(m){const t=document.getElementById('toast');document.getElementById('toastText').textContent=m;
+  t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800)}
+function showLoader(t){document.getElementById('loaderText').textContent=t||'Loading…';document.getElementById('loader').classList.add('show')}
+function hideLoader(){document.getElementById('loader').classList.remove('show')}
+function fmtCur(v){const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?'0':n.toLocaleString('en-IN')}
+
+// Edit mode toggle
+function toggleEditMode(){
+  editMode=!editMode;
+  document.getElementById('editToggle').classList.toggle('active',editMode);
+  renderTable(allE);
+  toast(editMode?'Edit mode ON ✏️':'Edit mode OFF');
+}
+
+// Double-click row → copy policy (only when NOT in edit mode)
+function handleRowDblClick(policyNo, tr) {
+  if(editMode) return;
+  if (!policyNo || !String(policyNo).trim()) return;
+  const text = String(policyNo).trim();
+  // Remove previous active row
+  const prev=document.querySelector('tr.copied-row');
+  if(prev) prev.classList.remove('copied-row');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      tr.classList.add('copied-row');
+      toast('Policy No copied: ' + text);
+    });
+  }
+}
+
+// Double-click a cell in edit mode → make it editable
+function editCell(td, entryId, col){
+  if(td.isContentEditable) return;
+  td.contentEditable='true';
+  td.classList.add('cell-editing');
+  td.focus();
+  // Select all text
+  const range=document.createRange();
+  range.selectNodeContents(td);
+  const sel=window.getSelection();
+  sel.removeAllRanges();sel.addRange(range);
+  function done(){
+    td.contentEditable='false';
+    td.classList.remove('cell-editing');
+    const val=td.textContent.trim();
+    // Save to backend
+    const e=allE.find(x=>x.id==entryId);
+    if(e) e[col]=val;
+    fetch(`/api/entries/${entryId}/cell?col=${col}&value=${encodeURIComponent(val)}`,{method:'PATCH'});
+    td.removeEventListener('blur',done);
+  }
+  td.addEventListener('blur',done);
+  td.addEventListener('keydown',ev=>{
+    if(ev.key==='Enter'){ev.preventDefault();td.blur()}
+    if(ev.key==='Escape'){td.blur()}
+  });
+}
+
+// Month Nav
+function setML(){document.getElementById('monthLabel').innerHTML=
+  `<span class="mm">${MN[vM]}</span><span class="yy">${vY}</span>`}
+function prevMonth(){vM--;if(vM<1){vM=12;vY--}setML();loadSheet()}
+function nextMonth(){vM++;if(vM>12){vM=1;vY++}setML();loadSheet()}
+
+// Settings
+function toggleSettings(){document.getElementById('settingsPanel').classList.toggle('open')}
+async function loadSettings(){try{const d=await(await fetch('/api/settings')).json();
+  document.getElementById('settingUrl').value=d.api_base_url||'';
+  document.getElementById('settingKey').value=d.api_key||''}catch(e){}}
+async function saveSettings(){const u=document.getElementById('settingUrl').value.trim(),
+  k=document.getElementById('settingKey').value.trim();
+  if(!u||!k){toast('Fill both fields');return}
+  try{const r=await fetch(`/api/settings?api_key=${encodeURIComponent(k)}&api_base_url=${encodeURIComponent(u)}`,{method:'POST'});
+  if(r.ok){toast('Settings saved ✅');document.getElementById('settingsStatus').textContent='✅ Saved';
+  document.getElementById('settingsStatus').style.color='var(--green)'}}catch(e){toast('Error: '+e.message)}}
+async function testConnection(){const s=document.getElementById('settingsStatus');
+  s.textContent='Testing…';s.style.color='var(--amber)';
+  try{const d=await(await fetch('/api/settings/test',{method:'POST'})).json();
+  s.textContent=d.success?`✅ ${d.message}`:`❌ ${d.message}`;
+  s.style.color=d.success?'var(--green)':'var(--red)'}catch(e){s.textContent='❌ '+e.message;s.style.color='var(--red)'}}
+
+// Default sort by serial number (1, 2, 3…)
+function defaultSort(ents){
+  return ents.sort((a,b)=>(parseInt(a.sn)||0)-(parseInt(b.sn)||0));
+}
+
+// Load Sheet
+async function loadSheet(){try{const d=await(await fetch(`/api/sheets/${vY}/${vM}`)).json();
+  if(!d.exists){allE=[];renderTable([]);updateStats([]);return}
+  allE=d.entries||[];defaultSort(allE);renderTable(allE);updateStats(allE)}catch(e){toast('Error: '+e.message)}}
+
+async function generateSheet(){showLoader(`Generating ${MN[vM]} ${vY}…`);
+  try{const r=await fetch(`/api/sheets/generate/${vY}/${vM}`,{method:'POST'});
+  if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
+  const d=await r.json();toast(`✅ ${d.total_count} policies`);await loadSheet()}
+  catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
+
+
+
+// Stats
+function updateStats(ents){const total=ents.length;
+  const paid=ents.filter(e=>e.status==='PAID').length;
+  const auto=ents.filter(e=>['AUTODEBIT','BRANCHPAID','DAILYCOLLECTION'].includes(e.status)).length;
+  const due=ents.filter(e=>e.status==='DUE').length;
+  let prem=0;ents.forEach(e=>{const p=parseFloat(String(e.premium||'0').replace(/[^0-9.]/g,''));if(!isNaN(p))prem+=p});
+  document.getElementById('statTotal').textContent=total;
+  document.getElementById('statPremium').textContent='₹'+fmtCur(prem);
+  document.getElementById('statPaid').textContent=paid+auto;
+  document.getElementById('statDue').textContent=due}
+
+// Table — optimized chunked render
+let _renderRaf=0;
+function renderTable(ents){
+  cancelAnimationFrame(_renderRaf);
+  const hd=document.getElementById('tHead'),bd=document.getElementById('tBody');
+  const sq=document.getElementById('filterInput').value.trim().toLowerCase();
+  // Highlight helper
+  function hlText(txt){
+    if(!sq) return txt;
+    const idx=txt.toLowerCase().indexOf(sq);
+    if(idx===-1) return txt;
+    return txt.slice(0,idx)+'<mark class="hl">'+txt.slice(idx,idx+sq.length)+'</mark>'+txt.slice(idx+sq.length);
+  }
+  // Header — every column gets a pastel color
+  const hCols=[];
+  for(let i=0;i<COLS.length;i++){
+    const c=COLS[i], ci=COL_CLR[i];
+    if(EDITABLE_COLS.has(c)){
+      hCols.push(`<th class="col-edit hp${ci}" ondblclick="editHeader('${c}',this)">${esc(COL_NAMES[c]||c)}</th>`);
+    }else if(ci>0){
+      hCols.push(`<th class="hp${ci}">${COL_NAMES[c]||c}</th>`);
+    }else{
+      hCols.push(`<th>${COL_NAMES[c]||c}</th>`);
+    }
+  }
+  hd.innerHTML=hCols.join('');
+  if(!ents.length){bd.innerHTML=`<tr><td colspan="${COLS.length}" class="te">
+    No due list for this month<br><button class="btn bp" style="margin-top:12px" onclick="generateSheet()">🔄 Generate Now</button></td></tr>`;return}
+  // Build all rows
+  const parts=new Array(ents.length);
+  for(let r=0;r<ents.length;r++){
+    const e=ents[r], pno=esc(e.policyno||'');
+    const cells=new Array(COLS.length);
+    for(let j=0;j<COLS.length;j++){
+      const c=COLS[j], ci=COL_CLR[j];
+      if(c==='status'){
+        const s=e.status||'DUE';
+        const scls=s==='DUE'?'st-due':s==='PAID'?'st-paid':s==='AUTODEBIT'?'st-auto':s==='BRANCHPAID'?'st-branch':'st-daily';
+        const lbl=s==='DUE'?'DUE':s==='PAID'?'PAID':s==='AUTODEBIT'?'AUTO DEBIT':s==='BRANCHPAID'?'BRANCH PAID':'DAILY COLL';
+        const click=(s==='DUE'||s==='PAID')?` onclick="toggleStatus(${e.id},this,event)"`:'';
+        cells[j]=`<td class="${scls}"${click}>${lbl}</td>`;
+        continue;
+      }
+      if(EDITABLE_COLS.has(c)){
+        const v=e[c]||'';
+        cells[j]=`<td class="editable" contenteditable="true" data-id="${e.id}" data-col="${c}" onblur="saveCell(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${hlText(esc(v))}</td>`;
+      }else{
+        const v=esc(e[c]||'');
+        if(editMode){
+          cells[j]=`<td ondblclick="editCell(this,${e.id},'${c}')">${hlText(v)}</td>`;
+        }else{
+          cells[j]=`<td>${hlText(v)}</td>`;
+        }
+      }
+    }
+    parts[r]=`<tr ondblclick="handleRowDblClick('${pno}',this)">`+cells.join('')+'</tr>';
+  }
+  bd.innerHTML=parts.join('');
+}
+
+// Editable column headers
+function editHeader(col, th){
+  event.stopPropagation();
+  const current = COL_NAMES[col] || col;
+  const input = document.createElement('input');
+  input.type='text';input.value=current;
+  input.style.cssText='width:70px;padding:2px 4px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--accent);border-radius:3px;text-align:center;background:#fff;outline:none;font-family:var(--font)';
+  th.textContent='';
+  th.appendChild(input);
+  input.focus();input.select();
+  async function save(){
+    const name=input.value.trim()||current;
+    COL_NAMES[col]=name;
+    th.textContent=name;
+    try{await fetch(`/api/col-names?col=${col}&name=${encodeURIComponent(name)}`,{method:'PATCH'})}catch(e){}
+  }
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){input.value=current;input.blur()}});
+}
+
+// Save editable cell on blur — debounced
+let _saveTimers={};
+async function saveCell(td){
+  const id=td.dataset.id, col=td.dataset.col, val=td.textContent.trim();
+  const key=id+'_'+col;
+  clearTimeout(_saveTimers[key]);
+  _saveTimers[key]=setTimeout(async()=>{
+    try{await fetch(`/api/entries/${id}/cell?col=${col}&value=${encodeURIComponent(val)}`,{method:'PATCH'});
+    const e=allE.find(x=>x.id==id);if(e)e[col]=val}catch(err){toast('Save failed')}
+  },300);
+}
+
+// Status toggle — update cell inline without full re-render
+async function toggleStatus(id,td,ev){
+  ev.stopPropagation();
+  try{const r=await fetch(`/api/entries/${id}/toggle`,{method:'PATCH'});
+  if(!r.ok){const e=await r.json();toast(e.detail||'Cannot toggle');return}
+  const d=await r.json();const e=allE.find(x=>x.id===id);if(e)e.status=d.status;
+  td.className=d.status==='PAID'?'st-paid':'st-due';
+  td.textContent=d.status==='PAID'?'PAID':'DUE';
+  updateStats(allE);toast(d.status==='PAID'?'Marked PAID ✅':'Reverted to DUE')}catch(e){toast('Error: '+e.message)}
+}
+
+function doSort(i){if(sortC===i)sortA=!sortA;else{sortC=i;sortA=true}
+  const k=COLS[i];
+  if(k==='status'){allE.sort((a,b)=>{const sa=STATUS_ORDER[a.status]??99,sb=STATUS_ORDER[b.status]??99;return sortA?sa-sb:sb-sa});}
+  else{allE.sort((a,b)=>{const va=String(a[k]||''),vb=String(b[k]||'');const c=va.localeCompare(vb,undefined,{numeric:true});return sortA?c:-c});}
+  renderTable(allE)}
+
+let _filterTimer=0;
+function filterTable(){
+  clearTimeout(_filterTimer);
+  _filterTimer=setTimeout(()=>{
+    const q=document.getElementById('filterInput').value.trim().toLowerCase();
+    if(!q){renderTable(allE);return}
+    renderTable(allE.filter(e=>COLS.some(c=>String(e[c]||'').toLowerCase().includes(q))));
+  },150);
+}
+
+function exportCSV(){window.open(`/api/sheets/${vY}/${vM}/csv`,'_blank')}
+
+// Unpaid
+async function loadUnpaid(){try{const d=await(await fetch('/api/unpaid-alert')).json();
+  const b=document.getElementById('unpaidBanner');
+  if(d.has_unpaid){document.getElementById('unpaidCount').textContent=d.count;
+    document.getElementById('unpaidTitle').textContent=`${d.count} policies unpaid from ${MN[d.month]} ${d.year}`;
+    document.getElementById('unpaidSubtext').textContent='Click to view';
+    b.classList.add('show');b._data=d}else{b.classList.remove('show')}}catch(e){}}
+
+function showUnpaidModal(){const d=document.getElementById('unpaidBanner')._data;if(!d)return;
+  document.getElementById('unpaidMonthLabel').textContent=`${MN[d.month]} ${d.year}`;
+  const cols=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date'];
+  let h='<div class="ts"><table><thead><tr>'+cols.map(c=>`<th>${LBL[c]||c}</th>`).join('')+
+    '</tr></thead><tbody>'+(d.entries||[]).map(e=>'<tr>'+cols.map(c=>{const v=e[c]||'';
+    return `<td title="${esc(v)}">${esc(v)}</td>`}).join('')+'</tr>').join('')+
+    '</tbody></table></div>';
+  document.getElementById('unpaidModalBody').innerHTML=h;
+  document.getElementById('unpaidModal').classList.add('open')}
+function closeUnpaidModal(){document.getElementById('unpaidModal').classList.remove('open')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUnpaidModal()});
+
+// Load custom column names
+async function loadColNames(){
+  try{const d=await(await fetch('/api/col-names')).json();
+  for(const[k,v] of Object.entries(d)) COL_NAMES[k]=v}catch(e){}}
+
+// Init
+(async()=>{setML();await loadSettings();await loadColNames();await loadSheet();loadUnpaid()})();
+</script>
+</body>
+</html>
