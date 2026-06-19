@@ -1,5 +1,5 @@
 """
-Online Excell v1.2.0 — Premium Follow-up Tracker
+Online Excell v1.2.1 — Premium Follow-up Tracker
 Auto-generates monthly due lists from Insurance Policy Manager API.
 """
 
@@ -14,7 +14,7 @@ import requests as http_requests   # renamed to avoid clash with Turso pipeline 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 log = logging.getLogger("excell")
-app = FastAPI(title="Online Excell", version="1.2.0")
+app = FastAPI(title="Online Excell", version="1.2.1")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data.db"))
@@ -290,16 +290,28 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""")
         # Migrate: add col1-col10 if missing on existing DB
-        existing_cols = {r["name"] for r in conn.execute("PRAGMA table_info(sheet_entries)").fetchall()}
+        # Use try/except instead of PRAGMA (PRAGMA doesn't work over Turso HTTP API)
         for i in range(1, 11):
             cname = f"col{i}"
-            if cname not in existing_cols:
+            try:
                 conn.execute(f"ALTER TABLE sheet_entries ADD COLUMN {cname} TEXT DEFAULT ''")
+            except Exception:
+                pass  # Column already exists
 
-init_db()
+try:
+    init_db()
+    log.info(f"[Startup] init_db OK — USE_TURSO={USE_TURSO}")
+    print(f"[Startup] init_db OK — USE_TURSO={USE_TURSO}")
+except Exception as e:
+    log.error(f"[Startup] init_db FAILED: {e}")
+    print(f"[Startup] init_db FAILED: {e}")
 
 # Restore from R2 if DB is empty (after fresh deploy)
-restore_from_r2()
+try:
+    restore_from_r2()
+except Exception as e:
+    log.error(f"[Startup] restore_from_r2 FAILED: {e}")
+    print(f"[Startup] restore_from_r2 FAILED: {e}")
 
 # ── Settings helpers ───────────────────────────────────────────────────────────
 
@@ -804,4 +816,26 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok", "version": "1.2.0"}
+    return {"status": "ok", "version": "1.2.1"}
+
+@app.get("/api/debug")
+def api_debug():
+    """Diagnostic endpoint to check DB connection and data."""
+    info = {
+        "USE_TURSO": USE_TURSO,
+        "TURSO_URL": TURSO_URL[:30] + "..." if TURSO_URL else "(empty)",
+        "TURSO_AUTH_TOKEN": "set" if TURSO_AUTH_TOKEN else "(empty)",
+        "USE_R2": USE_R2,
+        "DB_PATH": DB_PATH,
+    }
+    try:
+        with get_db() as conn:
+            sheets = conn.execute("SELECT COUNT(*) AS c FROM monthly_sheets").fetchone()
+            entries = conn.execute("SELECT COUNT(*) AS c FROM sheet_entries").fetchone()
+            info["sheets_count"] = sheets["c"] if sheets else 0
+            info["entries_count"] = entries["c"] if entries else 0
+            info["db_ok"] = True
+    except Exception as e:
+        info["db_ok"] = False
+        info["db_error"] = str(e)
+    return info
