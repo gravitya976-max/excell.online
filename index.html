@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Online Excell — Premium Due Tracker</title>
-<meta name="description" content="Auto-generated monthly premium due lists with follow-up tracking.">
+<meta name="description" content="Master data driven monthly premium due lists with follow-up tracking.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -70,9 +70,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .settings.open{display:block}
 @keyframes sd{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .settings h3{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
-.sr{display:flex;gap:10px;margin-bottom:10px}
+.sr{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .sr input{flex:1;padding:9px 13px;background:var(--p4s);border:1px solid var(--p4d);border-radius:var(--rx);
-  color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color .2s}
+  color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color .2s;min-width:120px}
 .sr input::placeholder{color:var(--muted)}
 .sr input:focus{border-color:var(--p5);box-shadow:0 0 0 3px var(--accent-g)}
 .sa{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -91,6 +91,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .bgr:hover{background:var(--p3)}
 .bd{background:rgba(255,82,82,0.08);color:var(--red);border:1px solid rgba(255,82,82,0.25)}
 .bd:hover{background:rgba(255,82,82,0.18);border-color:var(--red)}
+.bam{background:var(--amber-s);color:var(--amber);border:1px solid rgba(201,136,32,0.25)}
+.bam:hover{background:rgba(201,136,32,0.18)}
 
 /* ── Unpaid Alert ──────────────────────────────── */
 .alert{display:none;margin:0 0 10px;padding:10px 16px;
@@ -144,6 +146,9 @@ tbody tr{cursor:pointer}
 tbody tr:hover td{background:#f0e6ff !important}
 /* Active copied row — stays until next copy */
 tbody tr.copied-row td{background:#F0FFF0 !important;color:#1B8C3A !important;font-weight:700}
+/* Extra empty rows */
+tr.extra-row td{background:#fafafa;color:var(--muted)}
+tr.extra-row:hover td{background:#f0e6ff !important}
 
 .te{padding:50px 20px;text-align:center;color:var(--muted);font-size:13px;border:none !important}
 .te .btn{margin-top:12px}
@@ -195,6 +200,11 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 .mx:hover{background:var(--p1);color:var(--text)}
 .mc{flex:1;overflow-y:auto;padding:16px 20px}
 
+/* ── Single Policy Form ───────────────────────── */
+.sp-form{display:none;margin:10px 0 0}
+.sp-form.open{display:block}
+.sp-form .sr input{min-width:100px;flex:1}
+
 /* ── Responsive ────────────────────────────────── */
 @media(max-width:900px){
   .dash-bar{flex-direction:column}
@@ -227,7 +237,7 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 
   <!-- Section 1: Top Bar -->
   <div class="top">
-    <div class="t-ver"><span class="pill">v1.3.0</span></div>
+    <div class="t-ver"><span class="pill">v2.0.0</span></div>
     <div class="db-stats">
       <div class="db-stat s-total"><div class="ds-l">Total</div><div class="ds-v" id="statTotal">0</div></div>
       <div class="db-stat s-prem"><div class="ds-l">Premium</div><div class="ds-v" id="statPremium">₹0</div></div>
@@ -242,21 +252,45 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 
   <!-- Settings (hidden) -->
   <div class="settings" id="settingsPanel">
-    <h3>🔌 API Configuration</h3>
-    <div class="sr">
-      <input type="url" id="settingUrl" placeholder="Base URL (e.g. https://due-list-manager.onrender.com)">
-      <input type="password" id="settingKey" placeholder="API Key (e.g. ipm_xxxx…)">
-    </div>
+    <h3>📤 Upload & Data</h3>
     <div class="sa">
-      <button class="btn bp" onclick="saveSettings()">💾 Save</button>
-      <button class="btn bg" onclick="testConnection()">🔌 Test</button>
-      <span class="ss" id="settingsStatus"></span>
+      <button class="btn bp" onclick="document.getElementById('fileInput').click()">📤 Upload Sheet</button>
+      <button class="btn bg" onclick="toggleSingleForm()">➕ Add Single Policy</button>
+      <span class="ss" id="masterInfo">Master: 0 policies</span>
     </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none" onchange="handleUpload(this)">
+
+    <!-- Single policy form (hidden) -->
+    <div class="sp-form" id="singleForm">
+      <div class="sr">
+        <input id="spPolicyno" placeholder="Policy No *">
+        <input id="spName" placeholder="Name">
+        <input id="spDoc" placeholder="DOC (dd/mm/yyyy)">
+        <input id="spPlan" placeholder="Plan">
+        <input id="spMode" placeholder="Mode (M/Q/H/Y)">
+      </div>
+      <div class="sr">
+        <input id="spPremium" placeholder="Premium">
+        <input id="spSumass" placeholder="Sum Assured">
+        <input id="spMobile" placeholder="Mobile No">
+        <input id="spStatus" placeholder="Status (auto/branch/daily or blank)">
+      </div>
+      <div class="sa">
+        <button class="btn bgr" onclick="saveSinglePolicy()">💾 Save Policy</button>
+        <span class="ss" id="spStatus2"></span>
+      </div>
+    </div>
+
     <div class="set-divider"></div>
+    <h3>📋 Sheet Actions</h3>
     <div class="sa">
       <button class="btn bg" onclick="generateSheet()">🔄 Generate Sheet</button>
       <button class="btn bgr" onclick="exportCSV()">📥 Export CSV</button>
       <button class="btn bd" onclick="deleteSheet()">🗑️ Delete Sheet</button>
+    </div>
+    <div class="set-divider"></div>
+    <div class="sa">
+      <button class="btn bam" onclick="resetMaster()">⚠️ Reset All Master Data</button>
     </div>
   </div>
 
@@ -303,18 +337,24 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 </div>
 
 <script>
-const COLS=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date','status','col1','col2','col3','col4','col5','col6','col7','col8','col9','col10'];
-let COL_NAMES={sn:'SN',policyno:'Policy No',name:'Name',doc:'DOC',plan:'Plan',mode:'Mode',premium:'Premium',sumass:'Sum Assured',mobileno:'Mobile',due_date:'Due Date',status:'Status',col1:'Note 1',col2:'Note 2',col3:'Note 3',col4:'Note 4',col5:'Note 5',col6:'Note 6',col7:'Note 7',col8:'Note 8',col9:'Note 9',col10:'Note 10'};
-const EDITABLE_COLS=new Set(['col1','col2','col3','col4','col5','col6','col7','col8','col9','col10']);
-// Color index per column (1-5 pastels, 6=coral, 7=purple for status neighbors)
-const COL_CLR=[1,2,3,4,5,1,2,3,4,6,0,7,4,5,1,2,3,4,5,1,2];
+// ── Column config ──────────────────────────────────────────────
+const FIXED_COLS=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date','status'];
+const EXTRA=20;
+const NOTE_COLS=Array.from({length:EXTRA},(_,i)=>`col${i+1}`);
+const COLS=[...FIXED_COLS,...NOTE_COLS];
+let COL_NAMES={sn:'SN',policyno:'Policy No',name:'Name',doc:'DOC',plan:'Plan',mode:'Mode',
+  premium:'Premium',sumass:'Sum Assured',mobileno:'Mobile',due_date:'Due Date',status:'Status'};
+for(let i=1;i<=EXTRA;i++) COL_NAMES[`col${i}`]=`Note ${i}`;
+const EDITABLE_COLS=new Set(NOTE_COLS);
+// Color index per column (cycle pastels, 0=no color for status)
+const COL_CLR=[1,2,3,4,5,1,2,3,4,6,0,...Array.from({length:EXTRA},(_,i)=>(i%7)+1)];
 const STATUS_ORDER={DUE:0,PAID:1,AUTODEBIT:2,DAILYCOLLECTION:3,BRANCHPAID:4};
 const MN=['','January','February','March','April','May','June','July','August','September','October','November','December'];
-let vY,vM,allE=[],sortC=-1,sortA=true;
-let editMode=false;
+let vY,vM,allE=[],sortC=-1,sortA=true,editMode=false,masterCount=0;
 const now=new Date();vY=now.getFullYear();vM=now.getMonth()+1;
+const EXTRA_ROWS=20;
 
-// Clock — 12hr AM/PM + date
+// ── Clock ──────────────────────────────────────────────────────
 function tick(){const n=new Date();
   const day=String(n.getDate()).padStart(2,'0');
   const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][n.getMonth()];
@@ -323,136 +363,123 @@ function tick(){const n=new Date();
   document.getElementById('liveClock').textContent=`${day} ${mon} · ${time} ${ampm}`}
 setInterval(tick,1000);tick();
 
-// Utils
+// ── Utils ──────────────────────────────────────────────────────
 const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function toast(m){const t=document.getElementById('toast');document.getElementById('toastText').textContent=m;
-  t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800)}
+  t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
 function showLoader(t){document.getElementById('loaderText').textContent=t||'Loading…';document.getElementById('loader').classList.add('show')}
 function hideLoader(){document.getElementById('loader').classList.remove('show')}
 function fmtCur(v){const n=parseFloat(String(v).replace(/[^0-9.]/g,''));return isNaN(n)?'0':n.toLocaleString('en-IN')}
 
-// Edit mode toggle
-function toggleEditMode(){
-  editMode=!editMode;
-  document.getElementById('editToggle').classList.toggle('active',editMode);
-  renderTable(allE);
-  toast(editMode?'Edit mode ON ✏️':'Edit mode OFF');
-}
+// ── Edit Mode ──────────────────────────────────────────────────
+function toggleEditMode(){editMode=!editMode;document.getElementById('editToggle').classList.toggle('active',editMode);
+  renderTable(allE);toast(editMode?'Edit mode ON ✏️':'Edit mode OFF')}
 
-// Double-click row → copy policy (only when NOT in edit mode)
-function handleRowDblClick(policyNo, tr) {
-  if(editMode) return;
-  if (!policyNo || !String(policyNo).trim()) return;
-  const text = String(policyNo).trim();
-  // Remove previous active row
-  const prev=document.querySelector('tr.copied-row');
-  if(prev) prev.classList.remove('copied-row');
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      tr.classList.add('copied-row');
-      toast('Policy No copied: ' + text);
-    });
-  }
-}
+// ── Row double-click → copy policy ─────────────────────────────
+function handleRowDblClick(pno,tr){if(editMode)return;if(!pno||!String(pno).trim())return;
+  const text=String(pno).trim();const prev=document.querySelector('tr.copied-row');
+  if(prev)prev.classList.remove('copied-row');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{tr.classList.add('copied-row');toast('Copied: '+text)})}}
 
-// Double-click a cell in edit mode → make it editable
-function editCell(td, entryId, col){
-  if(td.isContentEditable) return;
-  td.contentEditable='true';
-  td.classList.add('cell-editing');
-  td.focus();
-  // Select all text
-  const range=document.createRange();
-  range.selectNodeContents(td);
-  const sel=window.getSelection();
-  sel.removeAllRanges();sel.addRange(range);
-  function done(){
-    td.contentEditable='false';
-    td.classList.remove('cell-editing');
-    const val=td.textContent.trim();
-    // Save to backend
-    const e=allE.find(x=>x.id==entryId);
-    if(e) e[col]=val;
+// ── Cell edit (double-click in edit mode) ──────────────────────
+function editCell(td,entryId,col){if(td.isContentEditable)return;
+  td.contentEditable='true';td.classList.add('cell-editing');td.focus();
+  const range=document.createRange();range.selectNodeContents(td);
+  const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+  function done(){td.contentEditable='false';td.classList.remove('cell-editing');
+    const val=td.textContent.trim();const e=allE.find(x=>x.id==entryId);if(e)e[col]=val;
     fetch(`/api/entries/${entryId}/cell?col=${col}&value=${encodeURIComponent(val)}`,{method:'PATCH'});
-    td.removeEventListener('blur',done);
-  }
+    td.removeEventListener('blur',done)}
   td.addEventListener('blur',done);
-  td.addEventListener('keydown',ev=>{
-    if(ev.key==='Enter'){ev.preventDefault();td.blur()}
-    if(ev.key==='Escape'){td.blur()}
-  });
-}
+  td.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();td.blur()}if(ev.key==='Escape')td.blur()})}
 
-// Month Nav
+// ── Month Nav ──────────────────────────────────────────────────
 function setML(){document.getElementById('monthLabel').innerHTML=
   `<span class="mm">${MN[vM]}</span><span class="yy">${vY}</span>`}
 function prevMonth(){vM--;if(vM<1){vM=12;vY--}setML();loadSheet()}
 function nextMonth(){vM++;if(vM>12){vM=1;vY++}setML();loadSheet()}
 
-// Settings
+// ── Settings ───────────────────────────────────────────────────
 function toggleSettings(){document.getElementById('settingsPanel').classList.toggle('open')}
-async function loadSettings(){try{const d=await(await fetch('/api/settings')).json();
-  document.getElementById('settingUrl').value=d.api_base_url||'';
-  document.getElementById('settingKey').value=d.api_key||''}catch(e){}}
-async function saveSettings(){const u=document.getElementById('settingUrl').value.trim(),
-  k=document.getElementById('settingKey').value.trim();
-  if(!u||!k){toast('Fill both fields');return}
-  try{const r=await fetch(`/api/settings?api_key=${encodeURIComponent(k)}&api_base_url=${encodeURIComponent(u)}`,{method:'POST'});
-  if(r.ok){toast('Settings saved ✅');document.getElementById('settingsStatus').textContent='✅ Saved';
-  document.getElementById('settingsStatus').style.color='var(--green)'}}catch(e){toast('Error: '+e.message)}}
-async function testConnection(){const s=document.getElementById('settingsStatus');
-  s.textContent='Testing…';s.style.color='var(--amber)';
-  try{const d=await(await fetch('/api/settings/test',{method:'POST'})).json();
-  s.textContent=d.success?`✅ ${d.message}`:`❌ ${d.message}`;
-  s.style.color=d.success?'var(--green)':'var(--red)'}catch(e){s.textContent='❌ '+e.message;s.style.color='var(--red)'}}
+function toggleSingleForm(){document.getElementById('singleForm').classList.toggle('open')}
 
-// Default sort by serial number (1, 2, 3…)
-function defaultSort(ents){
-  return ents.sort((a,b)=>(parseInt(a.sn)||0)-(parseInt(b.sn)||0));
-}
+// ── Upload handler ─────────────────────────────────────────────
+async function handleUpload(input){const file=input.files[0];if(!file)return;
+  showLoader(`Uploading ${file.name}…`);
+  const fd=new FormData();fd.append('file',file);
+  try{const r=await fetch('/api/master/upload',{method:'POST',body:fd});
+    if(!r.ok){const e=await r.json();throw new Error(e.detail||'Upload failed')}
+    const d=await r.json();masterCount=d.total_master;
+    document.getElementById('masterInfo').textContent=`Master: ${d.total_master} policies`;
+    toast(`✅ ${d.new} new, ${d.updated} updated — ${d.total_master} total`);
+  }catch(e){toast('❌ '+e.message)}finally{hideLoader();input.value=''}}
 
-// Load Sheet (for month navigation — uses init endpoint for speed)
+// ── Single policy save ─────────────────────────────────────────
+async function saveSinglePolicy(){
+  const pno=document.getElementById('spPolicyno').value.trim();
+  if(!pno){toast('Policy No is required');return}
+  const params=new URLSearchParams({policyno:pno,
+    name:document.getElementById('spName').value.trim(),
+    doc:document.getElementById('spDoc').value.trim(),
+    plan:document.getElementById('spPlan').value.trim(),
+    mode:document.getElementById('spMode').value.trim(),
+    premium:document.getElementById('spPremium').value.trim(),
+    sumass:document.getElementById('spSumass').value.trim(),
+    mobileno:document.getElementById('spMobile').value.trim(),
+    status:document.getElementById('spStatus').value.trim()});
+  try{const r=await fetch(`/api/master/single?${params}`,{method:'POST'});
+    if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
+    const d=await r.json();toast(`✅ Policy ${d.policyno} ${d.action}`);
+    document.getElementById('spPolicyno').value='';
+    const mc=await(await fetch('/api/master/count')).json();
+    masterCount=mc.count;document.getElementById('masterInfo').textContent=`Master: ${mc.count} policies`;
+  }catch(e){toast('❌ '+e.message)}}
+
+// ── Reset master data ──────────────────────────────────────────
+async function resetMaster(){if(!confirm('⚠️ Delete ALL master data?\n\nThis cannot be undone!'))return;
+  showLoader('Resetting…');
+  try{await fetch('/api/master/reset',{method:'DELETE'});masterCount=0;
+    document.getElementById('masterInfo').textContent='Master: 0 policies';toast('Master data cleared')}
+  catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
+
+// ── Load Sheet (uses /api/init for speed) ──────────────────────
 async function loadSheet(){try{const d=await(await fetch(`/api/init/${vY}/${vM}`)).json();
-  // Update col names
   if(d.col_names){for(const[k,v] of Object.entries(d.col_names)) COL_NAMES[k]=v}
-  // Update settings fields
-  if(d.settings){
-    document.getElementById('settingUrl').value=d.settings.api_base_url||'';
-    document.getElementById('settingKey').value=d.settings.api_key||'';
-  }
-  // Render sheet
+  masterCount=d.master_count||0;
+  document.getElementById('masterInfo').textContent=`Master: ${masterCount} policies`;
   const s=d.sheet;
-  if(!s||!s.exists){allE=[];renderTable([]);updateStats([]);return}
-  allE=s.entries||[];defaultSort(allE);renderTable(allE);updateStats(allE);
-  // Handle unpaid
-  handleUnpaid(d.unpaid);
+  if(!s||!s.exists){allE=[];renderTable([]);updateStats([]);handleUnpaid(d.unpaid);return}
+  allE=s.entries||[];allE.sort((a,b)=>(parseInt(a.sn)||0)-(parseInt(b.sn)||0));
+  renderTable(allE);updateStats(allE);handleUnpaid(d.unpaid);
   }catch(e){toast('Error: '+e.message)}}
 
-function handleUnpaid(d){
-  const b=document.getElementById('unpaidBanner');
+function handleUnpaid(d){const b=document.getElementById('unpaidBanner');
   if(!d){b.classList.remove('show');return}
   if(d.has_unpaid){document.getElementById('unpaidCount').textContent=d.count;
     document.getElementById('unpaidTitle').textContent=`${d.count} policies unpaid from ${MN[d.month]} ${d.year}`;
     document.getElementById('unpaidSubtext').textContent='Click to view';
-    b.classList.add('show');b._data=d}else{b.classList.remove('show')}
-}
+    b.classList.add('show');b._data=d}else{b.classList.remove('show')}}
 
-async function generateSheet(){showLoader(`Generating ${MN[vM]} ${vY}…`);
+// ── Generate / Delete / Export ──────────────────────────────────
+async function generateSheet(){
+  if(masterCount===0){toast('Upload master data first');toggleSettings();return}
+  showLoader(`Generating ${MN[vM]} ${vY}…`);
   try{const r=await fetch(`/api/sheets/generate/${vY}/${vM}`,{method:'POST'});
   if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
-  const d=await r.json();toast(`✅ ${d.total_count} policies`);await loadSheet()}
+  const d=await r.json();toast(`✅ ${d.total_count} policies due in ${MN[vM]}`);await loadSheet()}
   catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
 
-async function deleteSheet(){if(!confirm(`⚠️ Delete ALL data for ${MN[vM]} ${vY}?\n\nThis removes it from database AND backup. Cannot be undone!`))return;
+async function deleteSheet(){if(!confirm(`⚠️ Delete ALL data for ${MN[vM]} ${vY}?\n\nCannot be undone!`))return;
   showLoader(`Deleting ${MN[vM]} ${vY}…`);
   try{const r=await fetch(`/api/sheets/${vY}/${vM}`,{method:'DELETE'});
   if(!r.ok){const e=await r.json();throw new Error(e.detail||'Failed')}
   toast('🗑️ Sheet deleted');allE=[];renderTable([]);updateStats([])}
   catch(e){toast('Error: '+e.message)}finally{hideLoader()}}
 
+function exportCSV(){window.open(`/api/sheets/${vY}/${vM}/csv`,'_blank')}
 
-
-// Stats
+// ── Stats ──────────────────────────────────────────────────────
 function updateStats(ents){const total=ents.length;
   const paid=ents.filter(e=>e.status==='PAID').length;
   const auto=ents.filter(e=>['AUTODEBIT','BRANCHPAID','DAILYCOLLECTION'].includes(e.status)).length;
@@ -463,23 +490,19 @@ function updateStats(ents){const total=ents.length;
   document.getElementById('statPaid').textContent=paid+auto;
   document.getElementById('statDue').textContent=due}
 
-// Table — optimized chunked render
+// ── Table Render ───────────────────────────────────────────────
 let _renderRaf=0;
 function renderTable(ents){
   cancelAnimationFrame(_renderRaf);
   const hd=document.getElementById('tHead'),bd=document.getElementById('tBody');
   const sq=document.getElementById('filterInput').value.trim().toLowerCase();
-  // Highlight helper
-  function hlText(txt){
-    if(!sq) return txt;
-    const idx=txt.toLowerCase().indexOf(sq);
-    if(idx===-1) return txt;
-    return txt.slice(0,idx)+'<mark class="hl">'+txt.slice(idx,idx+sq.length)+'</mark>'+txt.slice(idx+sq.length);
-  }
-  // Header — every column gets a pastel color
+  function hlText(txt){if(!sq)return txt;const idx=txt.toLowerCase().indexOf(sq);
+    if(idx===-1)return txt;return txt.slice(0,idx)+'<mark class="hl">'+txt.slice(idx,idx+sq.length)+'</mark>'+txt.slice(idx+sq.length)}
+
+  // Header
   const hCols=[];
   for(let i=0;i<COLS.length;i++){
-    const c=COLS[i], ci=COL_CLR[i];
+    const c=COLS[i],ci=COL_CLR[i];
     if(EDITABLE_COLS.has(c)){
       hCols.push(`<th class="col-edit hp${ci}" ondblclick="editHeader('${c}',this)">${esc(COL_NAMES[c]||c)}</th>`);
     }else if(ci>0){
@@ -489,105 +512,125 @@ function renderTable(ents){
     }
   }
   hd.innerHTML=hCols.join('');
-  if(!ents.length){bd.innerHTML=`<tr><td colspan="${COLS.length}" class="te">
-    No due list for this month<br><button class="btn bp" style="margin-top:12px" onclick="generateSheet()">🔄 Generate Now</button></td></tr>`;return}
-  // Build all rows
-  const parts=new Array(ents.length);
-  for(let r=0;r<ents.length;r++){
-    const e=ents[r], pno=esc(e.policyno||'');
-    const cells=new Array(COLS.length);
+
+  if(!ents.length&&allE.length===0){
+    bd.innerHTML=`<tr><td colspan="${COLS.length}" class="te">
+      No due list for this month<br>
+      <button class="btn bp" style="margin-top:8px" onclick="generateSheet()">🔄 Generate from Master Data</button>
+      <button class="btn bg" style="margin-top:8px;margin-left:6px" onclick="toggleSettings()">📤 Upload Data</button></td></tr>`;
+    return}
+
+  // Data rows
+  const parts=[];
+  const displayEnts=ents.length?ents:allE;
+  for(let r=0;r<displayEnts.length;r++){
+    const e=displayEnts[r],pno=esc(e.policyno||'');
+    const cells=[];
     for(let j=0;j<COLS.length;j++){
-      const c=COLS[j], ci=COL_CLR[j];
+      const c=COLS[j],ci=COL_CLR[j];
       if(c==='status'){
         const s=e.status||'DUE';
         const scls=s==='DUE'?'st-due':s==='PAID'?'st-paid':s==='AUTODEBIT'?'st-auto':s==='BRANCHPAID'?'st-branch':'st-daily';
         const lbl=s==='DUE'?'DUE':s==='PAID'?'PAID':s==='AUTODEBIT'?'AUTO DEBIT':s==='BRANCHPAID'?'BRANCH PAID':'DAILY COLL';
         const click=(s==='DUE'||s==='PAID')?` onclick="toggleStatus(${e.id},this,event)"`:'';
-        cells[j]=`<td class="${scls}"${click}>${lbl}</td>`;
-        continue;
-      }
-      if(EDITABLE_COLS.has(c)){
+        cells.push(`<td class="${scls}"${click}>${lbl}</td>`);
+      }else if(EDITABLE_COLS.has(c)){
         const v=e[c]||'';
-        cells[j]=`<td class="editable" contenteditable="true" data-id="${e.id}" data-col="${c}" onblur="saveCell(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${hlText(esc(v))}</td>`;
+        cells.push(`<td class="editable" contenteditable="true" data-id="${e.id}" data-col="${c}" onblur="saveCell(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">${hlText(esc(v))}</td>`);
       }else{
         const v=esc(e[c]||'');
-        if(editMode){
-          cells[j]=`<td ondblclick="editCell(this,${e.id},'${c}')">${hlText(v)}</td>`;
-        }else{
-          cells[j]=`<td>${hlText(v)}</td>`;
-        }
+        if(editMode){cells.push(`<td ondblclick="editCell(this,${e.id},'${c}')">${hlText(v)}</td>`)}
+        else{cells.push(`<td>${hlText(v)}</td>`)}
       }
     }
-    parts[r]=`<tr ondblclick="handleRowDblClick('${pno}',this)">`+cells.join('')+'</tr>';
+    parts.push(`<tr ondblclick="handleRowDblClick('${pno}',this)">`+cells.join('')+'</tr>');
   }
+
+  // Extra empty rows (20 rows for manual entry)
+  if(!sq){
+    for(let r=0;r<EXTRA_ROWS;r++){
+      const sn=displayEnts.length+r+1;
+      const cells=[];
+      for(let j=0;j<COLS.length;j++){
+        const c=COLS[j];
+        if(c==='sn'){cells.push(`<td style="color:var(--muted)">${sn}</td>`)}
+        else if(c==='status'){cells.push('<td></td>')}
+        else{cells.push(`<td class="editable" contenteditable="true" data-col="${c}" data-extra="1" onblur="onExtraBlur(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" style="min-width:80px"></td>`)}
+      }
+      parts.push(`<tr class="extra-row" data-erow="${r}">`+cells.join('')+'</tr>');
+    }
+  }
+
   bd.innerHTML=parts.join('');
 }
 
-// Editable column headers
-function editHeader(col, th){
-  event.stopPropagation();
-  const current = COL_NAMES[col] || col;
-  const input = document.createElement('input');
-  input.type='text';input.value=current;
-  input.style.cssText='width:70px;padding:2px 4px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--accent);border-radius:3px;text-align:center;background:#fff;outline:none;font-family:var(--font)';
-  th.textContent='';
-  th.appendChild(input);
-  input.focus();input.select();
-  async function save(){
-    const name=input.value.trim()||current;
-    COL_NAMES[col]=name;
-    th.textContent=name;
-    try{await fetch(`/api/col-names?col=${col}&name=${encodeURIComponent(name)}`,{method:'PATCH'})}catch(e){}
-  }
-  input.addEventListener('blur',save);
-  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){input.value=current;input.blur()}});
+// ── Extra row save ─────────────────────────────────────────────
+let _extraTimers={};
+function onExtraBlur(td){
+  const tr=td.closest('tr');if(!tr||tr.dataset.saved)return;
+  const pnoCell=tr.querySelector('[data-col="policyno"]');
+  const pno=pnoCell?pnoCell.textContent.trim():'';
+  if(!pno)return;
+  const key=tr.dataset.erow;
+  clearTimeout(_extraTimers[key]);
+  _extraTimers[key]=setTimeout(async()=>{
+    const data={};
+    tr.querySelectorAll('[data-col]').forEach(c=>{const v=c.textContent.trim();if(v)data[c.dataset.col]=v});
+    try{const params=new URLSearchParams(data);
+      const r=await fetch(`/api/sheets/${vY}/${vM}/entry?${params}`,{method:'POST'});
+      if(r.ok){const d=await r.json();if(d.entry){tr.dataset.saved='1';tr.classList.remove('extra-row');
+        tr.querySelectorAll('td').forEach(c=>c.style.removeProperty('color'));
+        allE.push(d.entry);updateStats(allE);toast('Row added ✅')}}
+    }catch(e){toast('Save failed')}
+  },600);
 }
 
-// Save editable cell on blur — debounced
+// ── Column header edit ─────────────────────────────────────────
+function editHeader(col,th){event.stopPropagation();
+  const current=COL_NAMES[col]||col;
+  const input=document.createElement('input');input.type='text';input.value=current;
+  input.style.cssText='width:70px;padding:2px 4px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;border:1px solid var(--accent);border-radius:3px;text-align:center;background:#fff;outline:none;font-family:var(--font)';
+  th.textContent='';th.appendChild(input);input.focus();input.select();
+  async function save(){const name=input.value.trim()||current;COL_NAMES[col]=name;th.textContent=name;
+    try{await fetch(`/api/col-names?col=${col}&name=${encodeURIComponent(name)}`,{method:'PATCH'})}catch(e){}}
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){input.value=current;input.blur()}})}
+
+// ── Save cell on blur ──────────────────────────────────────────
 let _saveTimers={};
 async function saveCell(td){
-  const id=td.dataset.id, col=td.dataset.col, val=td.textContent.trim();
+  const id=td.dataset.id,col=td.dataset.col,val=td.textContent.trim();
+  if(td.dataset.extra)return; // handled by onExtraBlur
   const key=id+'_'+col;
   clearTimeout(_saveTimers[key]);
   _saveTimers[key]=setTimeout(async()=>{
     try{await fetch(`/api/entries/${id}/cell?col=${col}&value=${encodeURIComponent(val)}`,{method:'PATCH'});
     const e=allE.find(x=>x.id==id);if(e)e[col]=val}catch(err){toast('Save failed')}
-  },300);
-}
+  },300)}
 
-// Status toggle — update cell inline without full re-render
-async function toggleStatus(id,td,ev){
-  ev.stopPropagation();
+// ── Status toggle ──────────────────────────────────────────────
+async function toggleStatus(id,td,ev){ev.stopPropagation();
   try{const r=await fetch(`/api/entries/${id}/toggle`,{method:'PATCH'});
   if(!r.ok){const e=await r.json();toast(e.detail||'Cannot toggle');return}
   const d=await r.json();const e=allE.find(x=>x.id===id);if(e)e.status=d.status;
-  td.className=d.status==='PAID'?'st-paid':'st-due';
-  td.textContent=d.status==='PAID'?'PAID':'DUE';
-  updateStats(allE);toast(d.status==='PAID'?'Marked PAID ✅':'Reverted to DUE')}catch(e){toast('Error: '+e.message)}
-}
+  td.className=d.status==='PAID'?'st-paid':'st-due';td.textContent=d.status==='PAID'?'PAID':'DUE';
+  updateStats(allE);toast(d.status==='PAID'?'Marked PAID ✅':'Reverted to DUE')}catch(e){toast('Error: '+e.message)}}
 
+// ── Sort ───────────────────────────────────────────────────────
 function doSort(i){if(sortC===i)sortA=!sortA;else{sortC=i;sortA=true}
   const k=COLS[i];
-  if(k==='status'){allE.sort((a,b)=>{const sa=STATUS_ORDER[a.status]??99,sb=STATUS_ORDER[b.status]??99;return sortA?sa-sb:sb-sa});}
-  else{allE.sort((a,b)=>{const va=String(a[k]||''),vb=String(b[k]||'');const c=va.localeCompare(vb,undefined,{numeric:true});return sortA?c:-c});}
+  if(k==='status'){allE.sort((a,b)=>{const sa=STATUS_ORDER[a.status]??99,sb=STATUS_ORDER[b.status]??99;return sortA?sa-sb:sb-sa})}
+  else{allE.sort((a,b)=>{const va=String(a[k]||''),vb=String(b[k]||'');const c=va.localeCompare(vb,undefined,{numeric:true});return sortA?c:-c})}
   renderTable(allE)}
 
+// ── Filter ─────────────────────────────────────────────────────
 let _filterTimer=0;
-function filterTable(){
-  clearTimeout(_filterTimer);
-  _filterTimer=setTimeout(()=>{
-    const q=document.getElementById('filterInput').value.trim().toLowerCase();
+function filterTable(){clearTimeout(_filterTimer);
+  _filterTimer=setTimeout(()=>{const q=document.getElementById('filterInput').value.trim().toLowerCase();
     if(!q){renderTable(allE);return}
-    renderTable(allE.filter(e=>COLS.some(c=>String(e[c]||'').toLowerCase().includes(q))));
-  },150);
-}
+    renderTable(allE.filter(e=>COLS.some(c=>String(e[c]||'').toLowerCase().includes(q))))},150)}
 
-function exportCSV(){window.open(`/api/sheets/${vY}/${vM}/csv`,'_blank')}
-
-// Legacy unpaid loader (kept for manual refresh if needed)
-async function loadUnpaid(){try{const d=await(await fetch('/api/unpaid-alert')).json();
-  handleUnpaid(d)}catch(e){}}
-
+// ── Unpaid Modal ───────────────────────────────────────────────
 function showUnpaidModal(){const d=document.getElementById('unpaidBanner')._data;if(!d)return;
   document.getElementById('unpaidMonthLabel').textContent=`${MN[d.month]} ${d.year}`;
   const cols=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date'];
@@ -600,7 +643,7 @@ function showUnpaidModal(){const d=document.getElementById('unpaidBanner')._data
 function closeUnpaidModal(){document.getElementById('unpaidModal').classList.remove('open')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUnpaidModal()});
 
-// Init — single /api/init call handles everything
+// ── Init ───────────────────────────────────────────────────────
 (async()=>{setML();await loadSheet()})();
 </script>
 </body>

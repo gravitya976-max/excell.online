@@ -3,4 +3,5 @@ uvicorn[standard]
 python-dateutil
 requests
 apscheduler
-boto3
+python-multipart
+openpyxl
