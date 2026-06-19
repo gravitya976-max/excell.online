@@ -227,7 +227,7 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 
   <!-- Section 1: Top Bar -->
   <div class="top">
-    <div class="t-ver"><span class="pill">v1.2.1</span></div>
+    <div class="t-ver"><span class="pill">v1.3.0</span></div>
     <div class="db-stats">
       <div class="db-stat s-total"><div class="ds-l">Total</div><div class="ds-v" id="statTotal">0</div></div>
       <div class="db-stat s-prem"><div class="ds-l">Premium</div><div class="ds-v" id="statPremium">₹0</div></div>
@@ -411,10 +411,31 @@ function defaultSort(ents){
   return ents.sort((a,b)=>(parseInt(a.sn)||0)-(parseInt(b.sn)||0));
 }
 
-// Load Sheet
-async function loadSheet(){try{const d=await(await fetch(`/api/sheets/${vY}/${vM}`)).json();
-  if(!d.exists){allE=[];renderTable([]);updateStats([]);return}
-  allE=d.entries||[];defaultSort(allE);renderTable(allE);updateStats(allE)}catch(e){toast('Error: '+e.message)}}
+// Load Sheet (for month navigation — uses init endpoint for speed)
+async function loadSheet(){try{const d=await(await fetch(`/api/init/${vY}/${vM}`)).json();
+  // Update col names
+  if(d.col_names){for(const[k,v] of Object.entries(d.col_names)) COL_NAMES[k]=v}
+  // Update settings fields
+  if(d.settings){
+    document.getElementById('settingUrl').value=d.settings.api_base_url||'';
+    document.getElementById('settingKey').value=d.settings.api_key||'';
+  }
+  // Render sheet
+  const s=d.sheet;
+  if(!s||!s.exists){allE=[];renderTable([]);updateStats([]);return}
+  allE=s.entries||[];defaultSort(allE);renderTable(allE);updateStats(allE);
+  // Handle unpaid
+  handleUnpaid(d.unpaid);
+  }catch(e){toast('Error: '+e.message)}}
+
+function handleUnpaid(d){
+  const b=document.getElementById('unpaidBanner');
+  if(!d){b.classList.remove('show');return}
+  if(d.has_unpaid){document.getElementById('unpaidCount').textContent=d.count;
+    document.getElementById('unpaidTitle').textContent=`${d.count} policies unpaid from ${MN[d.month]} ${d.year}`;
+    document.getElementById('unpaidSubtext').textContent='Click to view';
+    b.classList.add('show');b._data=d}else{b.classList.remove('show')}
+}
 
 async function generateSheet(){showLoader(`Generating ${MN[vM]} ${vY}…`);
   try{const r=await fetch(`/api/sheets/generate/${vY}/${vM}`,{method:'POST'});
@@ -563,18 +584,14 @@ function filterTable(){
 
 function exportCSV(){window.open(`/api/sheets/${vY}/${vM}/csv`,'_blank')}
 
-// Unpaid
+// Legacy unpaid loader (kept for manual refresh if needed)
 async function loadUnpaid(){try{const d=await(await fetch('/api/unpaid-alert')).json();
-  const b=document.getElementById('unpaidBanner');
-  if(d.has_unpaid){document.getElementById('unpaidCount').textContent=d.count;
-    document.getElementById('unpaidTitle').textContent=`${d.count} policies unpaid from ${MN[d.month]} ${d.year}`;
-    document.getElementById('unpaidSubtext').textContent='Click to view';
-    b.classList.add('show');b._data=d}else{b.classList.remove('show')}}catch(e){}}
+  handleUnpaid(d)}catch(e){}}
 
 function showUnpaidModal(){const d=document.getElementById('unpaidBanner')._data;if(!d)return;
   document.getElementById('unpaidMonthLabel').textContent=`${MN[d.month]} ${d.year}`;
   const cols=['sn','policyno','name','doc','plan','mode','premium','sumass','mobileno','due_date'];
-  let h='<div class="ts"><table><thead><tr>'+cols.map(c=>`<th>${LBL[c]||c}</th>`).join('')+
+  let h='<div class="ts"><table><thead><tr>'+cols.map(c=>`<th>${COL_NAMES[c]||c}</th>`).join('')+
     '</tr></thead><tbody>'+(d.entries||[]).map(e=>'<tr>'+cols.map(c=>{const v=e[c]||'';
     return `<td title="${esc(v)}">${esc(v)}</td>`}).join('')+'</tr>').join('')+
     '</tbody></table></div>';
@@ -583,13 +600,8 @@ function showUnpaidModal(){const d=document.getElementById('unpaidBanner')._data
 function closeUnpaidModal(){document.getElementById('unpaidModal').classList.remove('open')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeUnpaidModal()});
 
-// Load custom column names
-async function loadColNames(){
-  try{const d=await(await fetch('/api/col-names')).json();
-  for(const[k,v] of Object.entries(d)) COL_NAMES[k]=v}catch(e){}}
-
-// Init
-(async()=>{setML();await loadSettings();await loadColNames();await loadSheet();loadUnpaid()})();
+// Init — single /api/init call handles everything
+(async()=>{setML();await loadSheet()})();
 </script>
 </body>
 </html>

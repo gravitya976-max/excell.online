@@ -1,5 +1,5 @@
 """
-Online Excell v1.2.1 — Premium Follow-up Tracker
+Online Excell v1.3.0 — Premium Follow-up Tracker
 Auto-generates monthly due lists from Insurance Policy Manager API.
 """
 
@@ -14,7 +14,7 @@ import requests as http_requests   # renamed to avoid clash with Turso pipeline 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 log = logging.getLogger("excell")
-app = FastAPI(title="Online Excell", version="1.2.1")
+app = FastAPI(title="Online Excell", version="1.3.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data.db"))
@@ -130,6 +130,30 @@ class TursoConnection:
                     raise Exception(f"Turso batch: {res['error']}")
             all_results.extend(data["results"])
         return all_results
+
+    def batch_query(self, statements):
+        """Execute multiple queries in ONE HTTP request, return list of TursoResult.
+        statements = [(sql, params), ...]
+        Returns: list of TursoResult, one per statement.
+        """
+        reqs = []
+        for sql, params in statements:
+            stmt = {"sql": sql}
+            if params:
+                stmt["args"] = [self._typed(p) for p in params]
+            reqs.append({"type": "execute", "stmt": stmt})
+        reqs.append({"type": "close"})
+        resp = http_requests.post(self.endpoint, json={"requests": reqs},
+                                  headers=self.headers, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        results = []
+        for res in data["results"]:
+            if res.get("type") == "error":
+                raise Exception(f"Turso batch_query: {res['error']}")
+            if res.get("type") == "ok":
+                results.append(TursoResult(res["response"]["result"]))
+        return results
 
 # ── Database Layer ─────────────────────────────────────────────────────────────
 
@@ -599,6 +623,95 @@ scheduler.start()
 
 # ── API Endpoints ──────────────────────────────────────────────────────────────
 
+# Combined init endpoint — fetches EVERYTHING in 1 Turso call
+@app.get("/api/init/{year}/{month}")
+def api_init(year: int, month: int):
+    """Return settings, col-names, sheet data, and unpaid alert in ONE request."""
+    today = date.today()
+    prev = date(today.year, today.month, 1) - __import__('datetime').timedelta(days=1)
+    prev_month, prev_year = prev.month, prev.year
+
+    with get_db() as conn:
+        if hasattr(conn, 'batch_query'):
+            # Turso: run ALL queries in ONE HTTP call
+            results = conn.batch_query([
+                ("SELECT key, value FROM app_settings", None),                                    # 0: all settings
+                ("SELECT * FROM monthly_sheets WHERE month=? AND year=?", (month, year)),         # 1: current sheet
+                ("SELECT id FROM monthly_sheets WHERE month=? AND year=?", (prev_month, prev_year)),  # 2: prev sheet id
+            ])
+            # Parse settings
+            all_settings = {r["key"]: r["value"] for r in results[0].fetchall()}
+
+            # Parse current sheet
+            sheet = results[1].fetchone()
+            entries = []
+            if sheet:
+                entry_results = conn.batch_query([
+                    ("SELECT * FROM sheet_entries WHERE sheet_id=? ORDER BY sn", (sheet["id"],)),
+                ])
+                entries = entry_results[0].fetchall()
+
+            # Parse unpaid
+            prev_sheet = results[2].fetchone()
+            unpaid_entries = []
+            unpaid_count = 0
+            if prev_sheet:
+                unpaid_results = conn.batch_query([
+                    ("SELECT * FROM sheet_entries WHERE sheet_id=? AND status='DUE' ORDER BY sn", (prev_sheet["id"],)),
+                ])
+                unpaid_entries = unpaid_results[0].fetchall()
+                unpaid_count = len(unpaid_entries)
+        else:
+            # Local SQLite: just run queries directly
+            all_settings_rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+            all_settings = {r["key"]: r["value"] for r in all_settings_rows}
+
+            sheet = conn.execute(
+                "SELECT * FROM monthly_sheets WHERE month=? AND year=?", (month, year)
+            ).fetchone()
+            entries = []
+            if sheet:
+                entries = conn.execute(
+                    "SELECT * FROM sheet_entries WHERE sheet_id=? ORDER BY sn", (sheet["id"],)
+                ).fetchall()
+
+            prev_sheet = conn.execute(
+                "SELECT id FROM monthly_sheets WHERE month=? AND year=?", (prev_month, prev_year)
+            ).fetchone()
+            unpaid_entries = []
+            unpaid_count = 0
+            if prev_sheet:
+                unpaid_entries = conn.execute(
+                    "SELECT * FROM sheet_entries WHERE sheet_id=? AND status='DUE' ORDER BY sn",
+                    (prev_sheet["id"],)
+                ).fetchall()
+                unpaid_count = len(unpaid_entries)
+
+    # Build col names from settings
+    col_names = {}
+    for i in range(1, 11):
+        col_names[f"col{i}"] = all_settings.get(f"col{i}_name", f"Note {i}")
+
+    return {
+        "settings": {
+            "api_key": all_settings.get("api_key", ""),
+            "api_base_url": all_settings.get("api_base_url", ""),
+        },
+        "col_names": col_names,
+        "sheet": {
+            "exists": sheet is not None,
+            **(dict(sheet) if sheet else {"month": month, "year": year}),
+            "entries": [dict(e) for e in entries],
+        },
+        "unpaid": {
+            "has_unpaid": unpaid_count > 0,
+            "count": unpaid_count,
+            "month": prev_month,
+            "year": prev_year,
+            "entries": [dict(e) for e in unpaid_entries],
+        },
+    }
+
 # Settings
 @app.get("/api/settings")
 def api_get_settings():
@@ -816,7 +929,7 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok", "version": "1.2.1"}
+    return {"status": "ok", "version": "1.3.0"}
 
 @app.get("/api/debug")
 def api_debug():
