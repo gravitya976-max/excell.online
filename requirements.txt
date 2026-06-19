@@ -3,4 +3,3 @@ uvicorn[standard]
 python-dateutil
 requests
 apscheduler
-libsql-experimental

@@ -18,10 +18,6 @@ app = FastAPI(title="Online Excell", version="1.0.0")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data.db"))
 
-# Turso cloud SQLite config (set these env vars for production)
-TURSO_URL = os.environ.get("TURSO_URL", "")       # e.g. libsql://your-db-name.turso.io
-TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
-
 # ── Database ───────────────────────────────────────────────────────────────────
 
 def dict_factory(cursor, row):
@@ -29,19 +25,11 @@ def dict_factory(cursor, row):
     return dict(zip(cols, row))
 
 def get_db():
-    """Connect to Turso (cloud) if configured, otherwise local SQLite."""
-    if TURSO_URL and TURSO_AUTH_TOKEN:
-        import libsql_experimental as libsql
-        conn = libsql.connect("local.db", sync_url=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
-        conn.sync()
-        conn.row_factory = dict_factory
-        return conn
-    else:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = dict_factory
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = dict_factory
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
 
 def init_db():
     with get_db() as conn:
