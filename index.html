@@ -230,6 +230,31 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 .top{animation:fu .3s ease both}
 .search-row{animation:fu .3s .05s ease both}
 .tw{animation:fu .3s .1s ease both}
+
+/* ── Drag & Drop Zone ─────────────────────────── */
+.drop-zone{border:2px dashed var(--p5);border-radius:var(--r);padding:28px 20px;text-align:center;
+  background:linear-gradient(135deg,var(--p5s),var(--p1s));cursor:pointer;transition:all .25s ease;
+  position:relative;overflow:hidden;margin-bottom:10px}
+.drop-zone::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(159,161,255,0.05),rgba(249,178,215,0.05));opacity:0;transition:opacity .25s}
+.drop-zone:hover{border-color:var(--p5d);transform:translateY(-1px);box-shadow:0 4px 18px rgba(159,161,255,0.2)}
+.drop-zone:hover::before{opacity:1}
+.drop-zone.drag-over{border-color:var(--accent);background:linear-gradient(135deg,var(--accent-g),var(--p1s));
+  transform:scale(1.01);box-shadow:0 8px 30px rgba(159,161,255,0.35)}
+.drop-zone.drag-over .dz-icon{transform:scale(1.15);color:var(--accent)}
+.dz-icon{font-size:32px;margin-bottom:6px;display:block;transition:transform .2s}
+.dz-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.dz-sub{font-size:10px;color:var(--muted);line-height:1.5}
+.dz-sub b{color:var(--p5d);font-weight:700}
+.dz-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 8px;border-radius:12px;
+  background:var(--p3s);border:1px solid var(--p3);color:var(--green);margin:2px 2px 0;letter-spacing:0.3px}
+.upload-progress{margin-top:8px;display:none}
+.upload-progress.show{display:block}
+.up-item{display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--surface);border:1px solid var(--p2);border-radius:var(--rx);margin-bottom:4px;font-size:11px}
+.up-item .up-name{flex:1;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.up-item .up-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+.up-item .up-status.pending{background:var(--amber-s);color:var(--amber)}
+.up-item .up-status.done{background:var(--green-s);color:var(--green)}
+.up-item .up-status.fail{background:var(--red-s);color:var(--red)}
 </style>
 </head>
 <body>
@@ -237,7 +262,7 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
 
   <!-- Section 1: Top Bar -->
   <div class="top">
-    <div class="t-ver"><span class="pill">v2.0.0</span></div>
+    <div class="t-ver"><span class="pill">v2.1.0</span></div>
     <div class="db-stats">
       <div class="db-stat s-total"><div class="ds-l">Total</div><div class="ds-v" id="statTotal">0</div></div>
       <div class="db-stat s-prem"><div class="ds-l">Premium</div><div class="ds-v" id="statPremium">₹0</div></div>
@@ -253,12 +278,23 @@ td.cell-editing{outline:2px solid var(--p5);outline-offset:-2px;background:#fff 
   <!-- Settings (hidden) -->
   <div class="settings" id="settingsPanel">
     <h3>📤 Upload & Data</h3>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <span class="dz-icon">📂</span>
+      <div class="dz-title">Drop Excel files here or click to browse</div>
+      <div class="dz-sub">Supports <b>multiple files</b> at once</div>
+      <div style="margin-top:6px">
+        <span class="dz-badge">.xlsx</span>
+        <span class="dz-badge">.xlsm</span>
+        <span class="dz-badge">.xls</span>
+        <span class="dz-badge">.csv</span>
+      </div>
+    </div>
+    <div class="upload-progress" id="uploadProgress"></div>
     <div class="sa">
-      <button class="btn bp" onclick="document.getElementById('fileInput').click()">📤 Upload Sheet</button>
       <button class="btn bg" onclick="toggleSingleForm()">➕ Add Single Policy</button>
       <span class="ss" id="masterInfo">Master: 0 policies</span>
     </div>
-    <input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none" onchange="handleUpload(this)">
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xlsm,.xls" multiple style="display:none" onchange="handleUpload(this)">
 
     <!-- Single policy form (hidden) -->
     <div class="sp-form" id="singleForm">
@@ -404,16 +440,44 @@ function nextMonth(){vM++;if(vM>12){vM=1;vY++}setML();loadSheet()}
 function toggleSettings(){document.getElementById('settingsPanel').classList.toggle('open')}
 function toggleSingleForm(){document.getElementById('singleForm').classList.toggle('open')}
 
-// ── Upload handler ─────────────────────────────────────────────
-async function handleUpload(input){const file=input.files[0];if(!file)return;
-  showLoader(`Uploading ${file.name}…`);
-  const fd=new FormData();fd.append('file',file);
-  try{const r=await fetch('/api/master/upload',{method:'POST',body:fd});
-    if(!r.ok){const e=await r.json();throw new Error(e.detail||'Upload failed')}
-    const d=await r.json();masterCount=d.total_master;
-    document.getElementById('masterInfo').textContent=`Master: ${d.total_master} policies`;
-    toast(`✅ ${d.new} new, ${d.updated} updated — ${d.total_master} total`);
-  }catch(e){toast('❌ '+e.message)}finally{hideLoader();input.value=''}}
+// ── Drag & Drop setup ──────────────────────────────────────────
+(function initDropZone(){
+  const dz=document.getElementById('dropZone');
+  if(!dz)return;
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();dz.classList.add('drag-over')}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();dz.classList.remove('drag-over')}));
+  dz.addEventListener('drop',e=>{
+    const files=e.dataTransfer.files;if(files.length)processFiles(files)});
+  document.body.addEventListener('dragover',e=>e.preventDefault());
+  document.body.addEventListener('drop',e=>e.preventDefault());
+})();
+
+// ── Upload handler (multi-file) ────────────────────────────────
+async function handleUpload(input){const files=input.files;if(!files||!files.length)return;
+  await processFiles(files);input.value=''}
+
+const ALLOWED_EXT=['.xlsx','.xlsm','.xls','.csv'];
+async function processFiles(fileList){
+  const files=Array.from(fileList).filter(f=>{
+    const ext='.'+f.name.split('.').pop().toLowerCase();
+    return ALLOWED_EXT.includes(ext)});
+  if(!files.length){toast('❌ No valid Excel/CSV files found');return}
+  const prog=document.getElementById('uploadProgress');
+  prog.innerHTML=files.map((f,i)=>`<div class="up-item" id="upf${i}"><span class="up-name">${esc(f.name)}</span><span class="up-status pending" id="ups${i}">Pending</span></div>`).join('');
+  prog.classList.add('show');
+  let totalNew=0,totalUpd=0,lastTotal=0;
+  for(let i=0;i<files.length;i++){
+    const file=files[i];const st=document.getElementById(`ups${i}`);
+    st.textContent='Uploading…';st.className='up-status pending';
+    const fd=new FormData();fd.append('file',file);
+    try{const r=await fetch('/api/master/upload',{method:'POST',body:fd});
+      if(!r.ok){const e=await r.json();throw new Error(e.detail||'Upload failed')}
+      const d=await r.json();totalNew+=d.new;totalUpd+=d.updated;lastTotal=d.total_master;
+      st.textContent=`✅ ${d.new} new, ${d.updated} upd`;st.className='up-status done';
+    }catch(e){st.textContent='❌ '+e.message;st.className='up-status fail'}}
+  masterCount=lastTotal;document.getElementById('masterInfo').textContent=`Master: ${lastTotal} policies`;
+  toast(`✅ ${files.length} file(s) — ${totalNew} new, ${totalUpd} updated — ${lastTotal} total`);
+  setTimeout(()=>prog.classList.remove('show'),5000)}
 
 // ── Single policy save ─────────────────────────────────────────
 async function saveSinglePolicy(){

@@ -1,6 +1,7 @@
 """
-Online Excell v2.0 — Premium Follow-up Tracker
+Online Excell v2.1 — Premium Follow-up Tracker
 Cache-first architecture: in-memory JSON sheets, async Turso persistence.
+Multi-file upload with drag & drop, supports .xlsx/.xlsm/.xls/.csv.
 """
 
 import os, re, sqlite3, json, io, csv, logging, threading
@@ -13,7 +14,7 @@ import requests as http_requests
 from apscheduler.schedulers.background import BackgroundScheduler
 
 log = logging.getLogger("excell")
-app = FastAPI(title="Online Excell", version="2.0.0")
+app = FastAPI(title="Online Excell", version="2.1.0")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -259,6 +260,7 @@ def parse_csv_file(content: bytes) -> list:
     return [row for row in reader if any(cell.strip() for cell in row)]
 
 def parse_excel_file(content: bytes) -> list:
+    """Parse .xlsx and .xlsm files using openpyxl."""
     from openpyxl import load_workbook
     wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
@@ -268,6 +270,18 @@ def parse_excel_file(content: bytes) -> list:
         if any(r):
             rows.append(r)
     wb.close()
+    return rows
+
+def parse_xls_file(content: bytes) -> list:
+    """Parse legacy .xls files using xlrd."""
+    import xlrd
+    wb = xlrd.open_workbook(file_contents=content)
+    ws = wb.sheet_by_index(0)
+    rows = []
+    for rx in range(ws.nrows):
+        r = [str(ws.cell_value(rx, cx)).strip() for cx in range(ws.ncols)]
+        if any(r):
+            rows.append(r)
     return rows
 
 
@@ -591,12 +605,14 @@ def api_init(year: int, month: int):
 async def api_upload_master(file: UploadFile = File(...)):
     content = await file.read()
     fn = (file.filename or "").lower()
-    if fn.endswith('.xlsx'):
+    if fn.endswith('.xlsx') or fn.endswith('.xlsm'):
         rows = parse_excel_file(content)
+    elif fn.endswith('.xls'):
+        rows = parse_xls_file(content)
     elif fn.endswith('.csv'):
         rows = parse_csv_file(content)
     else:
-        raise HTTPException(400, "Use .csv or .xlsx files only.")
+        raise HTTPException(400, "Use .csv, .xlsx, .xlsm, or .xls files only.")
 
     if len(rows) < 2:
         raise HTTPException(400, "File needs a header row + at least one data row.")
@@ -846,13 +862,13 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "2.1.0"}
 
 @app.get("/api/debug")
 def api_debug():
     return {
         "USE_TURSO": USE_TURSO,
-        "version": "2.0.0",
+        "version": "2.1.0",
         "master": CACHE["master_count"],
         "sheets_cached": list(CACHE["sheets"].keys()),
         "sheets_count": len(CACHE["sheets"]),
