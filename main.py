@@ -351,10 +351,32 @@ AUTO_STATUSES = {"AUTODEBIT", "BRANCHPAID", "DAILYCOLLECTION"}
 
 def normalize_status(s):
     if not s: return ""
-    c = re.sub(r"[^a-z]", "", str(s).lower().strip())
-    if c in ("autodebit",): return "AUTODEBIT"
-    if c in ("branchpaid",): return "BRANCHPAID"
-    if c in ("dailycollection",): return "DAILYCOLLECTION"
+    raw = str(s).strip()
+    if not raw: return ""
+    c = re.sub(r"[^a-z0-9]", "", raw.lower())
+    if not c: return ""
+    # AUTODEBIT variations: auto, auto debit, ad, a/d, ecs, nach, si, autopay, etc.
+    auto_matches = (
+        "autodebit", "auto", "ad", "ecs", "nach", "si",
+        "autopay", "autop", "standinginstruction", "emandate",
+        "mandate", "neft", "autopremium", "ap",
+    )
+    if c in auto_matches or c.startswith("auto") or c.startswith("nach") or c.startswith("ecs"):
+        return "AUTODEBIT"
+    # BRANCHPAID variations: branch, branch paid, br, bp, etc.
+    branch_matches = (
+        "branchpaid", "branch", "br", "bp", "branchcollection",
+        "branchcoll", "brpaid",
+    )
+    if c in branch_matches or c.startswith("branch"):
+        return "BRANCHPAID"
+    # DAILYCOLLECTION variations: daily, daily collection, dc, d/c, etc.
+    daily_matches = (
+        "dailycollection", "daily", "dc", "dailycoll",
+        "dailypayment", "dailyprem",
+    )
+    if c in daily_matches or c.startswith("daily"):
+        return "DAILYCOLLECTION"
     return ""
 
 
@@ -690,6 +712,22 @@ def api_add_single(policyno: str = Query(...), name: str = Query(""),
 @app.get("/api/master/count")
 def api_master_count():
     return {"count": CACHE["master_count"]}
+
+
+@app.get("/api/master/status-check")
+def api_status_check():
+    """Diagnostic: show raw status values in master data and what they normalize to."""
+    rows = db_exec("SELECT status, COUNT(*) as cnt FROM master_policies GROUP BY status ORDER BY cnt DESC")
+    result = []
+    for r in rows:
+        raw = r.get("status", "")
+        result.append({
+            "raw_status": raw,
+            "normalized_to": normalize_status(raw) or "(empty → DUE)",
+            "count": r["cnt"],
+        })
+    return {"status_breakdown": result, "total": sum(r["cnt"] for r in result)}
+
 
 
 @app.delete("/api/master/reset")
