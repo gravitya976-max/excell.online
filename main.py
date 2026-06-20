@@ -720,13 +720,14 @@ def api_status_check():
     rows = db_exec("SELECT status, COUNT(*) as cnt FROM master_policies GROUP BY status ORDER BY cnt DESC")
     result = []
     for r in rows:
-        raw = r.get("status", "")
+        raw = r.get("status") or ""
+        cnt = r.get("cnt", 0) or 0
         result.append({
             "raw_status": raw,
             "normalized_to": normalize_status(raw) or "(empty → DUE)",
-            "count": r["cnt"],
+            "count": cnt,
         })
-    return {"status_breakdown": result, "total": sum(r["cnt"] for r in result)}
+    return {"status_breakdown": result, "total": sum(r["count"] for r in result)}
 
 
 
