@@ -656,20 +656,20 @@ async def api_upload_master(file: UploadFile = File(...)):
                 data[field] = str(row[idx]).strip() if row[idx] else ""
         pno = data.get('policyno', '').strip().upper()
         if not pno: continue
-        st = normalize_status(data.get('status', ''))
+        raw_status = data.get('status', '').strip()  # store RAW — normalize at sheet generation
         if pno in existing:
             stmts.append((
                 "UPDATE master_policies SET name=?,doc=?,plan=?,mode=?,premium=?,sumass=?,mobileno=?,status=?,updated_at=? WHERE policyno=?",
                 (data.get('name',''), data.get('doc',''), data.get('plan',''),
                  data.get('mode',''), data.get('premium',''), data.get('sumass',''),
-                 data.get('mobileno',''), st, now, pno)))
+                 data.get('mobileno',''), raw_status, now, pno)))
             upd_c += 1
         else:
             stmts.append((
                 "INSERT INTO master_policies (policyno,name,doc,plan,mode,premium,sumass,mobileno,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (pno, data.get('name',''), data.get('doc',''), data.get('plan',''),
                  data.get('mode',''), data.get('premium',''), data.get('sumass',''),
-                 data.get('mobileno',''), st, now, now)))
+                 data.get('mobileno',''), raw_status, now, now)))
             existing.add(pno)
             new_c += 1
 
@@ -691,19 +691,19 @@ def api_add_single(policyno: str = Query(...), name: str = Query(""),
     status: str = Query("")):
     pno = policyno.strip().upper()
     if not pno: raise HTTPException(400, "Policy number required")
-    st = normalize_status(status)
+    raw_status = status.strip()  # store RAW — normalize at sheet generation
     now = datetime.now().isoformat()
     ex = db_exec("SELECT id FROM master_policies WHERE policyno=?", (pno,))
     if ex:
         db_exec(
             "UPDATE master_policies SET name=?,doc=?,plan=?,mode=?,premium=?,sumass=?,mobileno=?,status=?,updated_at=? WHERE policyno=?",
             (name.strip(), doc.strip(), plan.strip(), mode.strip(), premium.strip(),
-             sumass.strip(), mobileno.strip(), st, now, pno))
+             sumass.strip(), mobileno.strip(), raw_status, now, pno))
         return {"action": "updated", "policyno": pno}
     db_exec(
         "INSERT INTO master_policies (policyno,name,doc,plan,mode,premium,sumass,mobileno,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (pno, name.strip(), doc.strip(), plan.strip(), mode.strip(), premium.strip(),
-         sumass.strip(), mobileno.strip(), st, now, now))
+         sumass.strip(), mobileno.strip(), raw_status, now, now))
     mc = db_exec("SELECT COUNT(*) AS c FROM master_policies")
     CACHE["master_count"] = mc[0]["c"] if mc else 0
     return {"action": "added", "policyno": pno}
